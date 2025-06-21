@@ -24,7 +24,7 @@ def store_embeddings(all_splits, raw_dir):
 
     # Define persist directory relative to the project root
     # Assuming this function is called from src/, go up one level to reach models/
-    persist_dir = os.path.join("..", "models", "chroma_langchain_db", collection_name)
+    persist_dir = os.path.join("models", "chroma_langchain_db", collection_name)
 
     # Create the directory if it doesn't exist
     os.makedirs(persist_dir, exist_ok=True)
