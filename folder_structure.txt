@@ -1,0 +1,40 @@
+├── README.md
+├── requirements.txt / environment.yml
+├── .env                     # Secrets/API keys if any (never commit this)
+├── config/
+│   └── config.yaml          # Configurations for model, paths, etc.
+├── data/
+│   ├── raw/                 # Original PDFs / HTMLs of leaflets
+│   ├── interim/             # Intermediate Steps
+│   ├── processed/           # Cleaned, parsed leaflet texts
+│   └── interactions_db/     # Known interaction datasets (optional)
+├── notebooks/
+│   ├── eda.ipynb            # Data exploration and visualization
+│   └── rag_experiments.ipynb# Prototype and debug RAG flow
+├── src/
+│   ├── __init__.py
+│   ├── ingestion/           # Scripts to download, parse, clean leaflets
+│   │   ├── download_leaflets.py
+│   │   └── parse_leaflets.py
+│   ├── retrieval/           # Embedding, vector DB setup
+│   │   ├── embed.py
+│   │   └── vectordb.py
+│   ├── rag/                 # RAG pipeline logic
+│   │   ├── query_engine.py
+│   │   └── prompt_templates.py
+│   ├── evaluation/          # Evaluation metrics for answers
+│   │   └── evaluate.py
+│   └── app/                 # FastAPI or Streamlit frontend
+│       ├── main.py
+│       └── ui_helpers.py
+├── tests/
+│   ├── test_ingestion.py
+│   ├── test_rag.py
+│   └── ...
+├── scripts/
+│   ├── run_ingestion.py
+│   ├── run_embedding.py
+│   ├── run_app.py
+│   └── ...
+└── logs/
+    └── app.log              # Log files
