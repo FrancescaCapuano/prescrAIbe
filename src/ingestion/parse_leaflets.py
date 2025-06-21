@@ -26,9 +26,10 @@ def process_pdf_directory(input_dir: str, output_dir: str) -> None:
             convert_pdf_to_markdown(input_path, output_path)
 
 
-def process_all_drugs(drugs: List[str]) -> None:
+def convert_pdfs_to_markdown_for_drugs(drugs: List[str]) -> None:
     """
-    Iterates over a list of drugs and processes their corresponding PDF files.
+    Iterates over a list of drugs and processes their corresponding PDF files,
+    converting them to markdown.
     """
     for drug in drugs:
         raw_dir = f"data/raw/{drug}"
@@ -52,4 +53,4 @@ def load_llama_documents(pdf_path: str) -> List[any]:
 
 if __name__ == "__main__":
     drugs_to_process = ["CITALOPRAM", "AZITROMICINA"]
-    process_all_drugs(drugs_to_process)
+    convert_pdfs_to_markdown_for_drugs(drugs_to_process)
