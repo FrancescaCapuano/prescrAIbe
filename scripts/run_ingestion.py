@@ -6,9 +6,14 @@ Usage:
     python scripts/run_ingestion.py --drugs-file drugs.txt
 """
 
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import argparse
 from src.ingestion.download_leaflets import download_leaflets_for_drugs
-from src.ingestion.parse_leaflets import parse_leaflets_for_drugs
+from src.ingestion.parse_leaflets import convert_pdfs_to_markdown_for_drugs
 
 
 def parse_args():
@@ -42,9 +47,7 @@ def main():
     download_leaflets_for_drugs(drugs, base_dir=args.raw_dir)
 
     print("Parsing downloaded leaflets...")
-    parse_leaflets_for_drugs(
-        drugs, raw_dir=args.raw_dir, processed_dir=args.processed_dir
-    )
+    convert_pdfs_to_markdown_for_drugs(drugs)
 
     print("Ingestion pipeline completed.")
 
