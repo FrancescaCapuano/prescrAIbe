@@ -37,20 +37,6 @@ def convert_pdfs_to_markdown_for_drugs(drugs: List[str]) -> None:
         process_pdf_directory(raw_dir, interim_dir)
 
 
-def load_llama_documents(pdf_path: str) -> List[any]:
-    """
-    Loads LlamaIndex-compatible documents from a PDF.
-
-    Args:
-        pdf_path (str): Path to the input PDF.
-
-    Returns:
-        List[Any]: A list of LlamaIndexDocument objects.
-    """
-    md_read = pymupdf4llm.LlamaMarkdownReader()
-    return md_read.load_data(pdf_path)
-
-
 if __name__ == "__main__":
     drugs_to_process = ["CITALOPRAM", "AZITROMICINA"]
     convert_pdfs_to_markdown_for_drugs(drugs_to_process)
