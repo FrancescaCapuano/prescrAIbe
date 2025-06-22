@@ -13,7 +13,7 @@ def load_pdf_documents(file_path: str):
     return pages
 
 
-def split_documents(docs, chunk_size=1000, chunk_overlap=200):
+def split_documents(docs, chunk_size=500, chunk_overlap=200):
     """
     Splits documents into chunks using RecursiveCharacterTextSplitter.
     """
