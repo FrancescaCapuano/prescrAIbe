@@ -2,8 +2,8 @@
 Script to run the retrieval pipeline: load and split drug leaflet PDFs.
 
 Usage:
-    python scripts/run_retrieval.py --drugs CITALOPRAM AZITROMICINA
-    python scripts/run_retrieval.py --drugs-file drugs.txt
+    python scripts/run_indexing.py --drugs CITALOPRAM AZITROMICINA
+    python scripts/run_indexing.py --drugs-file drugs.txt
 """
 
 import sys
@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import argparse
-from src.indexing.split_documents import split_documents_for_drugs
+from src.indexing.split_documents import split_documents_for_drug
 from src.indexing.vector_db import store_embeddings
 
 
@@ -37,12 +37,16 @@ def main():
         with open(args.drugs_file) as f:
             drugs = [line.strip() for line in f if line.strip()]
     print(f"Loading and splitting PDFs for: {drugs}")
-    all_splits = split_documents_for_drugs(drugs, raw_dir=args.raw_dir)
-    print("Load and split process completed.")
 
-    print("Storing embeddings for drugs...")
-    store_embeddings(all_splits, raw_dir=args.raw_dir)
-    print("Embeddings stored in vector database.")
+    for drug in drugs:
+        print(f"\nProcessing drug: {drug}")
+        all_splits = split_documents_for_drug(drug, raw_dir=args.raw_dir)
+        print(f"Splitting completed for {drug}.")
+        print("Storing embeddings...")
+        store_embeddings(all_splits, drug)
+        print(f"Embeddings stored in vector database for {drug}.")
+
+    print("All drugs processed.")
 
 
 if __name__ == "__main__":

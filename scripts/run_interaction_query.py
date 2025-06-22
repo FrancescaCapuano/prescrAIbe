@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import argparse
 from src.prompt.prompt import create_dynamic_prompt
 from src.retrieval.retriever import get_retriever
+from src.ICD-retrieval.icd11_extractor import get_icd_description
 from langchain.chains import RetrievalQA
 from src.generation.generator import run_interaction_query  # <-- new import
 
@@ -44,6 +45,9 @@ if __name__ == "__main__":
         persist_dir=args.persist_dir,
         collection_name=args.collection_name,
     )
+
+    # Create the dynamic prompt for the interaction query
+    icd_description = get_icd_description(args.icd_code)  # Assuming this function exists
 
     # Run the interaction query (get_llm is called inside this function)
     answer = run_interaction_query(
