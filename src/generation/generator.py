@@ -24,7 +24,9 @@ def get_llm(model_id: str = "gpt2"):
     return llm
 
 
-def run_interaction_query(retriever, icd_code, drug_name, custom_rag_prompt):
+def run_interaction_query(
+    retriever, icd_code, icd_description, drug_name, custom_rag_prompt
+):
     llm = get_llm()
 
     qa_chain = RetrievalQA.from_chain_type(
@@ -35,7 +37,11 @@ def run_interaction_query(retriever, icd_code, drug_name, custom_rag_prompt):
         return_source_documents=True,
     )
 
-    result = qa_chain.invoke()
+result = qa_chain.invoke(
+    {
+        "query": f"Quali effetti ha il farmaco {drug_name} sulla condizione {icd_description} (codice ICD: {icd_code})?"
+    }
+)
 
     print(result["source_documents"])
     return result["result"]

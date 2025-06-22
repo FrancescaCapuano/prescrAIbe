@@ -53,11 +53,12 @@ if __name__ == "__main__":
     answer = run_interaction_query(
         retriever=retriever,
         icd_code=args.icd_code,
+        icd_description=icd_description,
         drug_name=args.drug_name,
         custom_rag_prompt=create_dynamic_prompt(
             drug_name=args.drug_name,
             icd_code=args.icd_code,
-            icd_description="",
+            icd_description=icd_description,
         ),
     )
 
