@@ -5,6 +5,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 def get_retriever(
     persist_dir: str,
+    drug_name: str,
     embeddings_model_name: str = "sentence-transformers/all-mpnet-base-v2",
     collection_name: str = "collection_raw",
     search_k: int = 2,
@@ -26,7 +27,9 @@ def get_retriever(
         embedding_function=embeddings,
         persist_directory=persist_dir,
     )
-    return vector_store.as_retriever(search_kwargs={"k": search_k})
+    return vector_store.as_retriever(
+        search_kwargs={"k": search_k, "filter": {"drug": drug_name}}
+    )
 
 
 if __name__ == "__main__":

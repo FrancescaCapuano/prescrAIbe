@@ -18,6 +18,7 @@ def store_embeddings(all_splits, drug_name):
     # Define embedding model
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-mpnet-base-v2"
+        # model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )
 
     # Use drug_name as the collection name

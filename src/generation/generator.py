@@ -3,7 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from langchain.chains import RetrievalQA
 
 
-def get_llm(model_id: str = "gpt2"):
+def get_llm(model_id: str = "meta-llama/Llama-3.2-1B-instruct"):
     """
     Loads and returns a HuggingFacePipeline LLM.
     """
@@ -11,15 +11,8 @@ def get_llm(model_id: str = "gpt2"):
     model = AutoModelForCausalLM.from_pretrained(
         model_id, device_map="auto", torch_dtype="auto"
     )
-    pipe = pipeline(
-        "text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        max_new_tokens=512,
-        temperature=0.7,
-        top_p=0.95,
-        repetition_penalty=1.15,
-    )
+    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
     llm = HuggingFacePipeline(pipeline=pipe)
     return llm
 
@@ -37,13 +30,12 @@ def run_interaction_query(
         return_source_documents=True,
     )
 
-result = qa_chain.invoke(
-    {
-        "query": f"Quali effetti ha il farmaco {drug_name} sulla condizione {icd_description} (codice ICD: {icd_code})?"
-    }
-)
+    result = qa_chain.invoke(
+        {
+            "query": f"Quali effetti ha il farmaco {drug_name} sulla condizione {icd_description} (codice ICD: {icd_code})?"
+        }
+    )
 
-    print(result["source_documents"])
     return result["result"]
 
 
