@@ -25,28 +25,31 @@ def split_documents(docs, chunk_size=500, chunk_overlap=200):
     return text_splitter.split_documents(docs)
 
 
-def split_documents_for_drugs(drugs_to_process, raw_dir="data/raw", flatten=False):
+def split_documents_for_drug(drug, raw_dir="data/raw"):
     """
-    For each drug in drugs_to_process, loads all PDFs in its raw_dir subfolder,
-    splits them, and returns:
-      - a dict: {drug: {pdf_file: splits}} if flatten=False (default)
-      - a flat list of all splits if flatten=True
+    Loads all PDFs for a single drug in its raw_dir subfolder,
+    splits them, and returns a flat list of all document chunks.
+    Adds metadata to each chunk.
     """
-    results = {}
-    for drug in drugs_to_process:
-        drug_dir = os.path.join(raw_dir, drug)
-        pdf_files = glob.glob(os.path.join(drug_dir, "*.pdf"))
-        drug_results = {}
-        for pdf_file in pdf_files:
-            print(f"Processing {pdf_file} ...")
-            docs = load_pdf_documents(pdf_file)
-            splits = split_documents(docs)
-            drug_results[os.path.basename(pdf_file)] = splits
-            print(f"  {len(splits)} splits.")
-        results[drug] = drug_results
-    return [doc for drug in results.values() for pdf in drug.values() for doc in pdf]
+    drug_dir = os.path.join(raw_dir, drug)
+    pdf_files = glob.glob(os.path.join(drug_dir, "*.pdf"))
+    drug_splits = []
+    for pdf_file in pdf_files:
+        print(f"Processing {pdf_file} ...")
+        docs = load_pdf_documents(pdf_file)
+        splits = split_documents(docs)
+        # Add metadata to each split
+        for chunk in splits:
+            chunk.metadata["drug"] = drug
+            chunk.metadata["source_pdf"] = os.path.basename(pdf_file)
+        drug_splits.extend(splits)
+        print(f"  {len(splits)} splits.")
+    return drug_splits
 
 
 if __name__ == "__main__":
     drugs_to_process = ["CITALOPRAM", "AZITROMICINA"]
-    all_splits = split_documents_for_drugs(drugs_to_process, flatten=True)
+    for drug in drugs_to_process:
+        print(f"Processing drug: {drug}")
+        splits = split_documents_for_drug(drug)
+        print(f"Total splits for {drug}: {len(splits)}")

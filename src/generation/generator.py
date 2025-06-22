@@ -24,23 +24,8 @@ def get_llm(model_id: str = "gpt2"):
     return llm
 
 
-def get_icd_description(icd_code: str) -> str:
-    """
-    Mock function to return an ICD description for a given ICD code.
-    Replace with a real lookup in production.
-    """
-    icd_lookup = {
-        "E11": "Type 2 diabetes mellitus",
-        "I10": "Essential (primary) hypertension",
-        # Add more codes as needed
-    }
-    return icd_lookup.get(icd_code, "ICD code not found")
-
-
 def run_interaction_query(retriever, icd_code, drug_name, custom_rag_prompt):
     llm = get_llm()
-    icd_description = get_icd_description(icd_code)
-    from langchain.chains import RetrievalQA
 
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
@@ -50,13 +35,7 @@ def run_interaction_query(retriever, icd_code, drug_name, custom_rag_prompt):
         return_source_documents=True,
     )
 
-    query = "E11 Type 2 diabetes mellitus"
-
-    result = qa_chain.invoke(
-        {
-            "query": query,  # Used for retrieval
-        }
-    )
+    result = qa_chain.invoke()
 
     print(result["source_documents"])
     return result["result"]

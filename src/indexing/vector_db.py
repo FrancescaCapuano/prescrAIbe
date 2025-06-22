@@ -1,15 +1,16 @@
 import os
+from tqdm import tqdm
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 
 
-def store_embeddings(all_splits, raw_dir):
+def store_embeddings(all_splits, drug_name):
     """
-    Store document embeddings in a local ChromaDB vector database.
+    Store document embeddings in a local ChromaDB vector database, one collection per drug.
 
     Args:
         all_splits: List of document chunks to be embedded and stored
-        raw_dir: Directory path used to create a unique collection name
+        drug_name: Name of the drug (used for collection name)
 
     Returns:
         vector_store: The ChromaDB vector store instance
@@ -19,8 +20,8 @@ def store_embeddings(all_splits, raw_dir):
         model_name="sentence-transformers/all-mpnet-base-v2"
     )
 
-    # Create collection name based on raw_dir to avoid conflicts
-    collection_name = f"collection_{os.path.basename(raw_dir)}"
+    # Use drug_name as the collection name
+    collection_name = f"collection_{drug_name.lower()}"
 
     # Define persist directory relative to the project root
     # Assuming this function is called from src/, go up one level to reach models/
@@ -36,11 +37,12 @@ def store_embeddings(all_splits, raw_dir):
         persist_directory=persist_dir,
     )
 
-    # Index chunks from split text
-    vector_store.add_documents(documents=all_splits)
+    # Use tqdm to show progress
+    for chunk in tqdm(all_splits, desc=f"Storing embeddings for {drug_name}"):
+        vector_store.add_documents([chunk])
 
     print(
-        f"Successfully stored {len(all_splits)} documents in vector database at {persist_dir}"
+        f"Successfully stored {len(all_splits)} documents in collection '{collection_name}' at {persist_dir}"
     )
 
     return vector_store
