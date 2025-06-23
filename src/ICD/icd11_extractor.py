@@ -5,6 +5,9 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+
+# load ICD database to local json
+
 # Load environment variables from .env file in project root
 env_path = Path(__file__).parent.parent.parent / ".env"
 load_dotenv(env_path)
@@ -270,7 +273,7 @@ class ICD11Extractor:
         return all_codes
 
     def extract_from_branch(self, uri):
-        """Recursively extract 4-digit codes from a branch"""
+        """Recursively extract codes from a branch"""
         codes = []
 
         api_url = uri.replace("http://", "https://")
@@ -313,8 +316,124 @@ class ICD11Extractor:
 
         return codes
 
+    def get_all_parent_info(self, entity_data):
+        """Fetch all parent information up to the 01 level, excluding root-level entries"""
+        all_parents = []
+
+        def safe_extract_value(data, default=""):
+            if data is None:
+                return default
+            elif isinstance(data, dict):
+                return data.get("@value", default)
+            elif isinstance(data, str):
+                return data
+            else:
+                return str(data) if data else default
+
+        def is_root_level_entry(parent_info):
+            """Check if this is a root-level entry that should be excluded"""
+            # Exclude entries that only have a title and no code
+            if not parent_info.get("code") and parent_info.get("title"):
+                title = parent_info.get("title", "").lower()
+                # Check for common root-level titles
+                if any(
+                    phrase in title
+                    for phrase in [
+                        "icd-11 for mortality and morbidity statistics",
+                        "mortality and morbidity statistics",
+                        "icd-11",
+                    ]
+                ):
+                    return True
+            return False
+
+        def should_stop_at_code(code):
+            """Check if we should stop climbing at this code level"""
+            if not code:
+                return False
+
+            # Stop at 01 level codes (like 01, 02, 03, etc.)
+            clean_code = code.replace(".", "").replace("-", "").strip()
+
+            # Check if it's a 2-digit code ending in 1 (01, 11, 21, etc.)
+            if len(clean_code) == 2 and clean_code.endswith("1"):
+                return True
+
+            return False
+
+        def get_parent_chain(current_entity_data, visited_uris=None):
+            """Recursively get all parents up to the 01 level"""
+            if visited_uris is None:
+                visited_uris = set()
+
+            parents = current_entity_data.get("parent", [])
+
+            for parent_uri in parents:
+                # Avoid infinite loops
+                if parent_uri in visited_uris:
+                    continue
+
+                visited_uris.add(parent_uri)
+
+                try:
+                    api_url = parent_uri.replace("http://", "https://")
+                    response = requests.get(api_url, headers=self.headers)
+
+                    if response.status_code == 200:
+                        parent_data = response.json()
+
+                        parent_info = {
+                            "code": parent_data.get("code", ""),
+                            "title": safe_extract_value(parent_data.get("title")),
+                            "definition": safe_extract_value(
+                                parent_data.get("definition")
+                            ),
+                            "long_definition": safe_extract_value(
+                                parent_data.get("longDefinition")
+                            ),
+                            "fully_specified_name": safe_extract_value(
+                                parent_data.get("fullySpecifiedName")
+                            ),
+                        }
+
+                        # Remove empty values
+                        cleaned_parent_info = {
+                            k: v for k, v in parent_info.items() if v
+                        }
+
+                        # Skip root-level entries
+                        if is_root_level_entry(cleaned_parent_info):
+                            continue
+
+                        # Add this parent if it has meaningful content
+                        if cleaned_parent_info:
+                            all_parents.append(cleaned_parent_info)
+
+                        # Check if we should stop climbing at this level
+                        current_code = parent_data.get("code", "")
+                        if should_stop_at_code(current_code):
+                            continue  # Don't climb further, but we already added this parent
+
+                        # Recursively get parents of this parent
+                        get_parent_chain(parent_data, visited_uris)
+
+                        time.sleep(0.05)  # Rate limiting
+
+                    else:
+                        print(
+                            f"Error fetching parent info from {parent_uri}: {response.status_code}"
+                        )
+
+                except Exception as e:
+                    print(f"Exception fetching parent info from {parent_uri}: {e}")
+
+        # Start the recursive parent chain retrieval
+        get_parent_chain(entity_data)
+
+        return all_parents
+
     def extract_complete_info(self, entity_data):
-        """Extract ALL available information from the API (excluding postcoordination)"""
+        """Extract information based on code length requirements"""
 
         def safe_extract_value(data, default=""):
             """Safely extract value from API response, handling different formats"""
@@ -327,124 +446,245 @@ class ICD11Extractor:
             else:
                 return str(data) if data else default
 
-        def safe_extract_list(data_list):
-            """Safely extract list of items with labels and references"""
-            if not data_list:
-                return []
+        def collect_all_labels(entity_data):
+            """Collect all labels from various fields into one list"""
+            all_labels = []
 
-            processed = []
-            for item in data_list:
-                if isinstance(item, dict):
-                    processed_item = {
-                        "label": safe_extract_value(item.get("label", "")),
-                        "foundation_reference": item.get("foundationReference", ""),
-                        "linearization_reference": item.get(
-                            "linearizationReference", ""
-                        ),
-                        "id": item.get("@id", ""),
-                        "code_range": item.get("codeRange", ""),
-                        "sort_weight": item.get("sortWeight", ""),
-                        "lang": item.get("lang", ""),
-                    }
-                    # Remove empty values
-                    processed_item = {k: v for k, v in processed_item.items() if v}
-                    processed.append(processed_item)
-                else:
-                    processed.append({"label": str(item)})
+            # Helper function to extract labels from different structures
+            def extract_labels_from_field(field_data):
+                labels = []
+                if not field_data:
+                    return labels
 
-            return processed
+                if isinstance(field_data, list):
+                    for item in field_data:
+                        if isinstance(item, dict):
+                            label = safe_extract_value(item.get("label", ""))
+                            if label:
+                                labels.append(label)
+                        elif isinstance(item, str) and item:
+                            labels.append(item)
+                elif isinstance(field_data, dict):
+                    label = safe_extract_value(field_data.get("label", ""))
+                    if label:
+                        labels.append(label)
+                elif isinstance(field_data, str) and field_data:
+                    labels.append(field_data)
 
-        # Extract all available information
-        complete_info = {
-            # Basic identification
-            "@context": entity_data.get("@context", ""),
-            "@id": entity_data.get("@id", ""),
-            "@type": entity_data.get("@type", ""),
-            # Core properties
-            "code": entity_data.get("code", ""),
-            "title": safe_extract_value(entity_data.get("title")),
-            "definition": safe_extract_value(entity_data.get("definition")),
-            "long_definition": safe_extract_value(entity_data.get("longDefinition")),
-            "fully_specified_name": safe_extract_value(
-                entity_data.get("fullySpecifiedName")
-            ),
-            # Classification properties
-            "class_kind": entity_data.get("classKind", ""),
-            "block_id": entity_data.get("blockId", ""),
-            "code_range": entity_data.get("codeRange", ""),
-            "sort_weight": entity_data.get("sortWeight", ""),
-            # Hierarchical relationships
-            "parent": entity_data.get("parent", []),
-            "child": entity_data.get("child", []),
-            "ancestor": entity_data.get("ancestor", []),
-            "descendant": entity_data.get("descendant", []),
-            # Terms and synonyms
-            "synonym": safe_extract_list(entity_data.get("synonym", [])),
-            "narrower_term": safe_extract_list(entity_data.get("narrowerTerm", [])),
-            "inclusion": safe_extract_list(entity_data.get("inclusion", [])),
-            "exclusion": safe_extract_list(entity_data.get("exclusion", [])),
-            "index_term": safe_extract_list(entity_data.get("indexTerm", [])),
-            # Cross-references
-            "coded_elsewhere": safe_extract_list(entity_data.get("codedElsewhere", [])),
-            "coded_note": safe_extract_list(entity_data.get("codingNote", [])),
-            "see_also": safe_extract_list(entity_data.get("seeAlso", [])),
-            # Foundation-specific
-            "foundation_child_elsewhere": entity_data.get(
-                "foundationChildElsewhere", []
-            ),
-            "foundation_reference": entity_data.get("foundationReference", ""),
-            "linearization_reference": entity_data.get("linearizationReference", ""),
-            "source": entity_data.get("source", ""),
-            # Browser and versioning
-            "browser_url": entity_data.get("browserUrl", ""),
-            "release_id": entity_data.get("releaseId", ""),
-            "release_date": entity_data.get("releaseDate", ""),
-            # Language and localization
-            "lang": entity_data.get("lang", ""),
-            # Additional classification info
-            "is_residual": entity_data.get("isResidual", ""),
-            "rubric_kind": entity_data.get("rubricKind", ""),
-            # Status and flags
-            "is_leaf": entity_data.get("isLeaf", ""),
-            "chapter": entity_data.get("chapter", ""),
-            # Usage and application
-            "use_additional_code": safe_extract_list(
-                entity_data.get("useAdditionalCode", [])
-            ),
-            "code_first": safe_extract_list(entity_data.get("codeFirst", [])),
-            "code_also": safe_extract_list(entity_data.get("codeAlso", [])),
-            # Diagnostic criteria (for mental health disorders)
-            "diagnostic_criteria": safe_extract_value(
-                entity_data.get("diagnosticCriteria")
-            ),
-            # ICD-O morphology (for neoplasms)
-            "icdo_morphology": safe_extract_value(entity_data.get("icdoMorphology")),
-            # Additional notes and comments
-            "note": safe_extract_value(entity_data.get("note")),
-            "coding_hint": safe_extract_value(entity_data.get("codingHint")),
-            # Statistical and epidemiological
-            "statistical_note": safe_extract_value(entity_data.get("statisticalNote")),
-            # Other properties that might be present
-            "manifestation_properties": entity_data.get("manifestationProperties", {}),
-            "scale_info": entity_data.get("scaleInfo", {}),
-            "value_id": entity_data.get("valueId", ""),
-            # Extension code related (non-postcoordination)
-            "required_postcoordination": entity_data.get(
-                "requiredPostcoordination", []
-            ),
-            "allowed_postcoordination": entity_data.get("allowedPostcoordination", []),
-            "default_postcoordination": entity_data.get("defaultPostcoordination", []),
-        }
+                return labels
 
-        # Remove empty fields to keep the JSON clean
+            # Collect labels from various fields
+            fields_with_labels = [
+                "synonym",
+                "narrowerTerm",
+                "inclusion",
+                "exclusion",
+                "indexTerm",
+                "codedElsewhere",
+                "codingNote",
+                "seeAlso",
+            ]
+
+            for field in fields_with_labels:
+                labels = extract_labels_from_field(entity_data.get(field, []))
+                all_labels.extend(labels)
+
+            # Remove duplicates while preserving order
+            unique_labels = []
+            seen = set()
+            for label in all_labels:
+                if label not in seen:
+                    unique_labels.append(label)
+                    seen.add(label)
+
+            return unique_labels
+
+        # Get code length to determine what information to include
+        code = entity_data.get("code", "")
+        code_length = len(code.replace(".", "").replace("-", "").replace(" ", ""))
+
+        # Base information for all codes with specified order
+        code_info = {}
+
+        # For 4-5-6 digit codes, add specific information with specified order
+        if code_length >= 4:
+            # Get all parent information up to root level
+            all_parent_info = self.get_all_parent_info(entity_data)
+
+            # Add all labels in one list
+            all_labels = collect_all_labels(entity_data)
+
+            # Process inclusions specifically for 4-5-6 digit codes
+            inclusions = entity_data.get("inclusion", [])
+            inclusion_labels = []
+            if inclusions:
+                for inclusion in inclusions:
+                    if isinstance(inclusion, dict):
+                        label = safe_extract_value(inclusion.get("label", ""))
+                        if label:
+                            inclusion_labels.append(label)
+                    elif isinstance(inclusion, str) and inclusion:
+                        inclusion_labels.append(inclusion)
+
+            # Build the ordered dictionary for 4-5-6 digit codes
+            code_info = {
+                "code": code,
+                "title": safe_extract_value(entity_data.get("title")),
+                "fully_specified_name": safe_extract_value(
+                    entity_data.get("fullySpecifiedName")
+                ),
+                "definition": safe_extract_value(entity_data.get("definition")),
+                "inclusions": inclusion_labels,
+                "all_labels": all_labels,
+                "parent_info": all_parent_info if all_parent_info else [],
+                "browser_url": entity_data.get("browserUrl", ""),
+            }
+
+        else:
+            # For codes less than 4 digits, include all original information
+            def safe_extract_list(data_list):
+                """Safely extract list of items with labels and references"""
+                if not data_list:
+                    return []
+
+                processed = []
+                for item in data_list:
+                    if isinstance(item, dict):
+                        processed_item = {
+                            "label": safe_extract_value(item.get("label", "")),
+                            "foundation_reference": item.get("foundationReference", ""),
+                            "linearization_reference": item.get(
+                                "linearizationReference", ""
+                            ),
+                            "id": item.get("@id", ""),
+                            "code_range": item.get("codeRange", ""),
+                            "sort_weight": item.get("sortWeight", ""),
+                            "lang": item.get("lang", ""),
+                        }
+                        # Remove empty values
+                        processed_item = {k: v for k, v in processed_item.items() if v}
+                        processed.append(processed_item)
+                    else:
+                        processed.append({"label": str(item)})
+
+                return processed
+
+            # Include all original fields for shorter codes
+            complete_info = {
+                # Basic identification
+                "@context": entity_data.get("@context", ""),
+                "@id": entity_data.get("@id", ""),
+                "@type": entity_data.get("@type", ""),
+                # Core properties
+                "code": code,
+                "title": safe_extract_value(entity_data.get("title")),
+                "definition": safe_extract_value(entity_data.get("definition")),
+                "long_definition": safe_extract_value(
+                    entity_data.get("longDefinition")
+                ),
+                "fully_specified_name": safe_extract_value(
+                    entity_data.get("fullySpecifiedName")
+                ),
+                # Classification properties
+                "class_kind": entity_data.get("classKind", ""),
+                "block_id": entity_data.get("blockId", ""),
+                "code_range": entity_data.get("codeRange", ""),
+                "sort_weight": entity_data.get("sortWeight", ""),
+                # Hierarchical relationships
+                "parent": entity_data.get("parent", []),
+                "child": entity_data.get("child", []),
+                "ancestor": entity_data.get("ancestor", []),
+                "descendant": entity_data.get("descendant", []),
+                # Terms and synonyms
+                "synonym": safe_extract_list(entity_data.get("synonym", [])),
+                "narrower_term": safe_extract_list(entity_data.get("narrowerTerm", [])),
+                "inclusion": safe_extract_list(entity_data.get("inclusion", [])),
+                "exclusion": safe_extract_list(entity_data.get("exclusion", [])),
+                "index_term": safe_extract_list(entity_data.get("indexTerm", [])),
+                # Cross-references
+                "coded_elsewhere": safe_extract_list(
+                    entity_data.get("codedElsewhere", [])
+                ),
+                "coded_note": safe_extract_list(entity_data.get("codingNote", [])),
+                "see_also": safe_extract_list(entity_data.get("seeAlso", [])),
+                # Foundation-specific
+                "foundation_child_elsewhere": entity_data.get(
+                    "foundationChildElsewhere", []
+                ),
+                "foundation_reference": entity_data.get("foundationReference", ""),
+                "linearization_reference": entity_data.get(
+                    "linearizationReference", ""
+                ),
+                "source": entity_data.get("source", ""),
+                # Browser and versioning
+                "browser_url": entity_data.get("browserUrl", ""),
+                "release_id": entity_data.get("releaseId", ""),
+                "release_date": entity_data.get("releaseDate", ""),
+                # Language and localization
+                "lang": entity_data.get("lang", ""),
+                # Additional classification info
+                "is_residual": entity_data.get("isResidual", ""),
+                "rubric_kind": entity_data.get("rubricKind", ""),
+                # Status and flags
+                "is_leaf": entity_data.get("isLeaf", ""),
+                "chapter": entity_data.get("chapter", ""),
+                # Usage and application
+                "use_additional_code": safe_extract_list(
+                    entity_data.get("useAdditionalCode", [])
+                ),
+                "code_first": safe_extract_list(entity_data.get("codeFirst", [])),
+                "code_also": safe_extract_list(entity_data.get("codeAlso", [])),
+                # Diagnostic criteria (for mental health disorders)
+                "diagnostic_criteria": safe_extract_value(
+                    entity_data.get("diagnosticCriteria")
+                ),
+                # ICD-O morphology (for neoplasms)
+                "icdo_morphology": safe_extract_value(
+                    entity_data.get("icdoMorphology")
+                ),
+                # Additional notes and comments
+                "note": safe_extract_value(entity_data.get("note")),
+                "coding_hint": safe_extract_value(entity_data.get("codingHint")),
+                # Statistical and epidemiological
+                "statistical_note": safe_extract_value(
+                    entity_data.get("statisticalNote")
+                ),
+                # Other properties that might be present
+                "manifestation_properties": entity_data.get(
+                    "manifestationProperties", {}
+                ),
+                "scale_info": entity_data.get("scaleInfo", {}),
+                "value_id": entity_data.get("valueId", ""),
+                # Extension code related (non-postcoordination)
+                "required_postcoordination": entity_data.get(
+                    "requiredPostcoordination", []
+                ),
+                "allowed_postcoordination": entity_data.get(
+                    "allowedPostcoordination", []
+                ),
+                "default_postcoordination": entity_data.get(
+                    "defaultPostcoordination", []
+                ),
+            }
+
+            # Remove empty fields to keep the JSON clean
+            code_info = {}
+            for key, value in complete_info.items():
+                if value:  # Keep non-empty values
+                    if isinstance(value, list) and len(value) == 0:
+                        continue  # Skip empty lists
+                    elif isinstance(value, dict) and len(value) == 0:
+                        continue  # Skip empty dictionaries
+                    elif isinstance(value, str) and value.strip() == "":
+                        continue  # Skip empty strings
+                    else:
+                        code_info[key] = value
+
+        # Remove empty fields from the final result
         cleaned_info = {}
-        for key, value in complete_info.items():
-            if value:  # Keep non-empty values
-                if isinstance(value, list) and len(value) == 0:
-                    continue  # Skip empty lists
-                elif isinstance(value, dict) and len(value) == 0:
-                    continue  # Skip empty dictionaries
-                elif isinstance(value, str) and value.strip() == "":
+        for key, value in code_info.items():
+            if value or value == []:  # Keep empty lists as specified
+                if isinstance(value, str) and value.strip() == "":
                     continue  # Skip empty strings
                 else:
                     cleaned_info[key] = value
@@ -647,53 +887,3 @@ if __name__ == "__main__":
         import traceback
 
         traceback.print_exc()
-
-
-# define function get_icd_description to extract the description of a given ICD code *********************************************************
-
-
-def get_icd_description(icd_code, json_file_dir="./"):
-    """
-    Extract the definition/description for a given ICD-11 code.
-
-    Args:
-        icd_code (str): The ICD-11 code to search for (e.g., "1A00")
-
-    Returns:
-        str: The definition/description of the ICD code, or None if not found
-    """
-    # Path to the JSON file relative to the script location
-    json_file_path = os.path.join(
-        json_file_dir,
-        "icd11_all_codes_chapter_1_all_digits.json",
-    )
-
-    try:
-        # Load the JSON data
-        with open(json_file_path, "r", encoding="utf-8") as file:
-            icd_data = json.load(file)
-
-        # Search for the matching code
-        for entry in icd_data:
-            if entry.get("code") == icd_code:
-                print(f"Found entry for code: {icd_code}")
-                # Return the definition if it exists, otherwise return the title
-                definition = entry.get("definition")
-                if definition:
-                    return definition
-                else:
-                    # Some entries might not have a definition, so return title as fallback
-                    return entry.get("title", "No description available")
-
-        # If code not found
-        return None
-
-    except FileNotFoundError:
-        print(f"Error: Could not find the JSON file at {json_file_path}")
-        return None
-    except json.JSONDecodeError:
-        print("Error: Could not parse the JSON file")
-        return None
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return None
