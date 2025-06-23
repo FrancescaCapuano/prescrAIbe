@@ -1,5 +1,6 @@
 from langchain_huggingface import HuggingFacePipeline
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer  # , pipeline
+from transformers.pipelines import pipeline
 from langchain.chains import RetrievalQA
 
 

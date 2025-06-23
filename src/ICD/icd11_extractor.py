@@ -672,7 +672,6 @@ def get_icd_description(icd_code, json_file_dir="./"):
         # Load the JSON data
         with open(json_file_path, "r", encoding="utf-8") as file:
             icd_data = json.load(file)
-        print(icd_data[0])
 
         # Search for the matching code
         for entry in icd_data:

@@ -94,8 +94,3 @@ def download_leaflets_for_drugs(
     """
     for drug in drugs_to_process:
         save_leaflets(drug, base_dir=base_dir)
-
-
-if __name__ == "__main__":
-    drugs_to_process = ["CITALOPRAM", "AZITROMICINA"]
-    download_leaflets_for_drugs(drugs_to_process)
