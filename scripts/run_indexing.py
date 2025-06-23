@@ -12,8 +12,8 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import argparse
-from src.indexing.split_documents import split_documents_for_drug
-from src.indexing.vector_db import store_embeddings
+from src.rag.indexing.split_documents import split_documents_for_drug
+from src.rag.indexing.vector_db import store_embeddings
 
 
 def parse_args():

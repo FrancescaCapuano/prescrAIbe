@@ -2,8 +2,8 @@
 Script to run the ingestion pipeline: download and parse drug leaflets.
 
 Usage:
-    python scripts/run_ingestion.py --drugs CITALOPRAM AZITROMICINA
-    python scripts/run_ingestion.py --drugs-file drugs.txt
+    python scripts/run_preprocessing.py --drugs CITALOPRAM AZITROMICINA
+    python scripts/run_preprocessing.py --drugs-file drugs.txt
 """
 
 import sys
@@ -12,8 +12,8 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import argparse
-from src.ingestion.download_leaflets import download_leaflets_for_drugs
-from src.ingestion.parse_leaflets import convert_pdfs_to_markdown_for_drugs
+from src.preprocessing.download_leaflets import download_leaflets_for_drugs
+from src.preprocessing.parse_leaflets import convert_pdfs_to_markdown_for_drugs
 
 
 def parse_args():
@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument(
         "--processed-dir",
         type=str,
-        default="data/interim",
+        default="data/processed",
         help="Directory to save parsed texts.",
     )
     return parser.parse_args()
@@ -44,10 +44,12 @@ def main():
             drugs = [line.strip() for line in f if line.strip()]
 
     print(f"Downloading leaflets for: {drugs}")
-    download_leaflets_for_drugs(drugs, base_dir=args.raw_dir)
+    # download_leaflets_for_drugs(drugs, base_dir=args.raw_dir)
 
     print("Parsing downloaded leaflets...")
-    convert_pdfs_to_markdown_for_drugs(drugs)
+    convert_pdfs_to_markdown_for_drugs(
+        drugs, raw_dir=args.raw_dir, processed_dir=args.processed_dir
+    )
 
     print("Ingestion pipeline completed.")
 

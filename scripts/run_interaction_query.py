@@ -11,15 +11,14 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import argparse
-from src.prompt.prompt import create_dynamic_prompt
-from src.retrieval.retriever import get_retriever
+from src.rag.prompt import create_dynamic_prompt
+from src.rag.retrieval import get_retriever
+from src.rag.generation import run_interaction_query
 from src.ICD.icd11_extractor import get_icd_description
 from langchain.chains import RetrievalQA
-from src.generation.generator import run_interaction_query  # <-- new import
 from huggingface_hub import login
 
-HF_TOKEN = os.getenv("HF_TOKEN")  # Or set your token directly here as a string
-print(f"HF_TOKEN: {HF_TOKEN}")
+HF_TOKEN = os.getenv("HF_TOKEN")
 if HF_TOKEN:
     login(token=HF_TOKEN)
 
@@ -46,14 +45,10 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    import pdb
-
     # Get the ICD description
     icd_description = get_icd_description(
         args.icd_code, json_file_dir="data/ICD-codes/"
     )
-    print(icd_description)
-    pdb.set_trace()
 
     # Set up retriever
     retriever = get_retriever(
@@ -64,7 +59,7 @@ if __name__ == "__main__":
     )
 
     # Get the ICD description
-    icd_description = get_icd_description(args.icd_code)
+    # icd_description = get_icd_description(args.icd_code)
 
     # Run the interaction query (get_llm is called inside this function)
     answer = run_interaction_query(

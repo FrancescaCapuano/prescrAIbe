@@ -26,17 +26,14 @@ def process_pdf_directory(input_dir: str, output_dir: str) -> None:
             convert_pdf_to_markdown(input_path, output_path)
 
 
-def convert_pdfs_to_markdown_for_drugs(drugs: List[str]) -> None:
+def convert_pdfs_to_markdown_for_drugs(
+    drugs: List[str], raw_dir: str = "data/raw", processed_dir: str = "data/interim"
+) -> None:
     """
     Iterates over a list of drugs and processes their corresponding PDF files,
-    converting them to markdown.
+    converting them to markdown. Allows custom raw and processed directories.
     """
     for drug in drugs:
-        raw_dir = f"data/raw/{drug}"
-        interim_dir = f"data/interim/{drug}"
-        process_pdf_directory(raw_dir, interim_dir)
-
-
-if __name__ == "__main__":
-    drugs_to_process = ["CITALOPRAM", "AZITROMICINA"]
-    convert_pdfs_to_markdown_for_drugs(drugs_to_process)
+        drug_raw_dir = os.path.join(raw_dir, drug)
+        drug_processed_dir = os.path.join(processed_dir, drug)
+        process_pdf_directory(drug_raw_dir, drug_processed_dir)
