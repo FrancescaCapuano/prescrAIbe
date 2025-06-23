@@ -2,7 +2,7 @@
 Script to run an interaction query using a drug name and ICD code.
 
 Usage:
-    python scripts/run_interaction_query.py --icd-code E11 --drug-name CITALOPRAM
+    python scripts/run_interaction_query.py --icd-code 1A40.0 --drug-name CITALOPRAM
 """
 
 import sys
@@ -13,8 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import argparse
 from src.prompt.prompt import create_dynamic_prompt
 from src.retrieval.retriever import get_retriever
-
-# from src.ICD.icd11_extractor import get_icd_description
+from src.ICD.icd11_extractor import get_icd_description
 from langchain.chains import RetrievalQA
 from src.generation.generator import run_interaction_query  # <-- new import
 from huggingface_hub import login
@@ -47,6 +46,15 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
+    import pdb
+
+    # Get the ICD description
+    icd_description = get_icd_description(
+        args.icd_code, json_file_dir="data/ICD-codes/"
+    )
+    print(icd_description)
+    pdb.set_trace()
+
     # Set up retriever
     retriever = get_retriever(
         persist_dir=args.persist_dir,
@@ -55,9 +63,8 @@ if __name__ == "__main__":
         search_k=2,  # Number of documents to retrieve
     )
 
-    # Create the dynamic prompt for the interaction query
-    # icd_description = get_icd_description(args.icd_code)  # Assuming this function exists
-    icd_description = "Diabetes mellito di tipo 2"  # Placeholder for ICD description
+    # Get the ICD description
+    icd_description = get_icd_description(args.icd_code)
 
     # Run the interaction query (get_llm is called inside this function)
     answer = run_interaction_query(
