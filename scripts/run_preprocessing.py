@@ -46,16 +46,18 @@ def main():
             drugs = [line.strip() for line in f if line.strip()]
 
     print(f"Downloading leaflets for: {drugs}")
-    download_leaflets_for_drugs(drugs, base_dir=args.raw_dir)
+    # download_leaflets_for_drugs(drugs, base_dir=args.raw_dir)
 
     pdb.set_trace()  # For debugging purposes, remove in production
 
+    """
     print("Parsing downloaded leaflets...")
     convert_pdfs_to_markdown_for_drugs(
         drugs, raw_dir=args.raw_dir, processed_dir=args.processed_dir
     )
 
     print("Ingestion pipeline completed.")
+    """
 
 
 if __name__ == "__main__":
