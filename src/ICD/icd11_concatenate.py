@@ -2,7 +2,9 @@ import json
 import os
 
 
-def get_icd_description(icd_code):
+def get_icd_description(
+    icd_code, json_file_path="./icd11_all_codes_chapter_1_all_digits.json"
+):
     """
     Extract and format all available information for a given ICD-11 code.
 
@@ -13,16 +15,6 @@ def get_icd_description(icd_code):
         str: A formatted string containing all available information for the ICD code,
              or None if the code is not found
     """
-    # Path to the JSON file relative to the script location
-    json_file_path = os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "..",
-        "data",
-        "ICD-codes",
-        "icd11_all_codes_chapter_1_all_digits.json",
-    )
-
     try:
         # Load the JSON data
         with open(json_file_path, "r", encoding="utf-8") as file:

@@ -14,13 +14,16 @@ import argparse
 from src.rag.prompt import create_dynamic_prompt
 from src.rag.retrieval import get_retriever
 from src.rag.generation import run_interaction_query
-from src.ICD.icd11_extractor import get_icd_description
+from src.ICD.icd11_concatenate import get_icd_description
 from langchain.chains import RetrievalQA
 from huggingface_hub import login
+import torch
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 if HF_TOKEN:
     login(token=HF_TOKEN)
+
+torch.cuda.empty_cache()
 
 
 def parse_args():
@@ -45,11 +48,16 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
+    """
     # Get the ICD description
     icd_description = get_icd_description(
-        args.icd_code, json_file_dir="data/ICD-codes/"
+        args.icd_code,
+        json_file_path="data/ICD-codes/icd11_all_codes_chapter_1_all_digits.json",
     )
 
+    print(f"ICD Description for {args.icd_code}: {icd_description}")
+    """
+    icd_description = "placeholder"
     # Set up retriever
     retriever = get_retriever(
         persist_dir=args.persist_dir,
@@ -57,9 +65,6 @@ if __name__ == "__main__":
         collection_name="collection_" + args.drug_name.lower(),
         search_k=2,  # Number of documents to retrieve
     )
-
-    # Get the ICD description
-    # icd_description = get_icd_description(args.icd_code)
 
     # Run the interaction query (get_llm is called inside this function)
     answer = run_interaction_query(
