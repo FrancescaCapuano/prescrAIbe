@@ -2,8 +2,7 @@
 Script to run the ingestion pipeline: download and parse drug leaflets.
 
 Usage:
-    python scripts/run_preprocessing.py --drugs CITALOPRAM AZITROMICINA
-    python scripts/run_preprocessing.py --drugs-file drugs.txt
+    python scripts/run_preprocessing.py --drugs-file data/leaflets/estrazione_farmaci.xlsx
 """
 
 import sys
@@ -14,22 +13,25 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import argparse
 from src.preprocessing.download_leaflets import download_leaflets_for_drugs
 from src.preprocessing.parse_leaflets import convert_pdfs_to_markdown_for_drugs
+import pdb
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run leaflet ingestion pipeline.")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--drugs", nargs="+", help="List of drug names to process.")
     group.add_argument(
         "--drugs-file", type=str, help="Path to a file with drug names (one per line)."
     )
     parser.add_argument(
-        "--raw-dir", type=str, default="data/raw", help="Directory to save raw PDFs."
+        "--raw-dir",
+        type=str,
+        default="data/leaflets/raw",
+        help="Directory to save raw PDFs.",
     )
     parser.add_argument(
         "--processed-dir",
         type=str,
-        default="data/processed",
+        default="data/leaflets/processed",
         help="Directory to save parsed texts.",
     )
     return parser.parse_args()
@@ -44,7 +46,9 @@ def main():
             drugs = [line.strip() for line in f if line.strip()]
 
     print(f"Downloading leaflets for: {drugs}")
-    # download_leaflets_for_drugs(drugs, base_dir=args.raw_dir)
+    download_leaflets_for_drugs(drugs, base_dir=args.raw_dir)
+
+    pdb.set_trace()  # For debugging purposes, remove in production
 
     print("Parsing downloaded leaflets...")
     convert_pdfs_to_markdown_for_drugs(

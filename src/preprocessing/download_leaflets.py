@@ -2,6 +2,9 @@ import requests
 import os
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+import pandas as pd
+import csv
+from tqdm import tqdm
 
 
 def get_drug_data(drug_name: str, page: int = 0) -> Dict[str, Any]:
@@ -40,57 +43,119 @@ def download_pdf(url: str, filename: str) -> None:
         f.write(response.content)
 
 
-def save_leaflets(drug_name: str, base_dir: str = "data/raw") -> None:
+def save_leaflets(
+    drug_name: str, aic6_code: str, base_dir: str = "data/leaflets/raw"
+) -> Optional[str]:
     """
-    Download all available leaflets (FI and RCP) for a given drug.
-
-    Args:
-        drug_name (str): The drug name to process.
-        base_dir (str): Directory to save the PDFs.
+    Download all available leaflets (FI and RCP) for a given drug and aic_code.
+    Returns a failure reason string if no match or download fails, else None.
+    Skips download if file already exists.
     """
-    # Create a subdirectory with the drug name (uppercased and spaces replaced)
-    sanitized_name = drug_name.strip().replace(" ", "_").upper()
-    save_dir = os.path.join(base_dir, sanitized_name)
-
+    matches = 0
     page = 0
+    download_failed = False
     while True:
         data = get_drug_data(drug_name, page=page)
         content = data.get("data", {}).get("content", [])
-
         if not content:
             if page == 0:
-                print(f"No data found for {drug_name}.")
+                return "no result"
             break
 
         for result in content:
             codice_sis = result["medicinale"]["codiceSis"]
             aic6 = result["medicinale"]["aic6"]
 
-            urls = {
-                "FI": f"https://api.aifa.gov.it/aifa-bdf-eif-be/1.0.0/organizzazione/{codice_sis}/farmaci/{aic6}/stampati?ts=FI",
-                "RCP": f"https://api.aifa.gov.it/aifa-bdf-eif-be/1.0.0/organizzazione/{codice_sis}/farmaci/{aic6}/stampati?ts=RCP",
-            }
+            if str(aic6) == str(aic6_code).lstrip("0"):
+                matches += 1
+                urls = {
+                    "FI": f"https://api.aifa.gov.it/aifa-bdf-eif-be/1.0.0/organizzazione/{codice_sis}/farmaci/{aic6}/stampati?ts=FI",
+                    "RCP": f"https://api.aifa.gov.it/aifa-bdf-eif-be/1.0.0/organizzazione/{codice_sis}/farmaci/{aic6}/stampati?ts=RCP",
+                }
+                for kind, url in urls.items():
+                    filename = os.path.join(
+                        base_dir,
+                        f"{kind}_{str(codice_sis).zfill(6)}_{str(aic6).zfill(6)}.pdf",
+                    )
+                    if os.path.exists(filename):
+                        print(f"Already exists, skipping: {filename}")
+                        continue
+                    try:
+                        download_pdf(url, filename)
+                        print(f"Downloaded: {filename}")
+                    except requests.HTTPError as e:
+                        print(f"Failed to download {kind} for {aic6}: {e}")
+                        download_failed = True
+                break
+        page += 1
+    if matches == 0:
+        return "no result"
+    if download_failed:
+        return "download problem"
+    return None
 
-            for kind, url in urls.items():
-                filename = f"{save_dir}/{kind}_{str(codice_sis).zfill(6)}_{str(aic6).zfill(6)}.pdf"
-                try:
-                    download_pdf(url, filename)
-                    print(f"Downloaded: {filename}")
-                except requests.HTTPError as e:
-                    print(f"Failed to download {kind} for {aic6}: {e}")
 
-        page += 1  # Go to next page
+def split_name_and_dosage(row):
+    parts = str(row["name"]).split("*")
+    if len(parts) == 2:
+        return pd.Series({"name": parts[0].strip(), "dosaggio": parts[1].strip()})
+    else:
+        return pd.Series({"name": row["name"], "dosaggio": row["name"]})
+
+
+def parse_drugs_file(drugs_file: str) -> set:
+    """
+    Reads an Excel file containing drug names and codes and returns a set of (drug_name, aic6) tuples.
+    aic6 is the first 6 digits of the 'code' column.
+    Assumes columns are named 'name' and 'code'.
+    """
+    df = pd.read_excel(drugs_file)
+    df[["name", "dosaggio"]] = df.apply(split_name_and_dosage, axis=1)
+
+    # Drop rows with missing values in either column
+    df = df.dropna(subset=["name", "code"])
+
+    # Extract aic6 as the first 6 digits of the code (as string, padded if needed)
+    df["aic6"] = df["code"].astype(str).str.zfill(9).str[:6]
+
+    # Return as set of tuples (name, aic6)
+    return set(df[["name", "aic6"]].itertuples(index=False, name=None))
 
 
 def download_leaflets_for_drugs(
-    drugs_to_process: List[str], base_dir: str = "data/raw"
+    drugs_to_process: list,
+    base_dir: str = "data/leaflets/raw",
+    failed_csv: str = "data/leaflets/failed_downloads.csv",
 ) -> None:
-    """
-    Download all available leaflets for a list of drugs.
+    keys = ["name", "aic6", "failed"]
+    file_exists = os.path.exists(failed_csv)
+    # Open the CSV once in append mode
+    with open(failed_csv, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=keys)
+        if not file_exists:
+            writer.writeheader()
+        for drug_name, aic_code in tqdm(drugs_to_process, desc="Downloading leaflets"):
+            print(f"Downloading leaflets for {drug_name} with AIC code {aic_code}")
+            fail_reason = save_leaflets(drug_name, aic_code, base_dir=base_dir)
+            if fail_reason:
+                writer.writerow(
+                    {"name": drug_name, "aic6": aic_code, "failed": fail_reason}
+                )
+                f.flush()  # Ensure it's written to disk immediately
+            print(
+                f"Finished downloading leaflets for {drug_name} with AIC code {aic_code}"
+            )
+            print("-" * 40)
+    print(f"Failed downloads appended to {failed_csv}")
 
-    Args:
-        drugs_to_process (List[str]): List of drug names to process.
-        base_dir (str): Directory to save the PDFs.
-    """
-    for drug in drugs_to_process:
-        save_leaflets(drug, base_dir=base_dir)
+
+if __name__ == "__main__":
+
+    # Path to your Excel file
+    drugs_file = "/home/francesca/Desktop/DS Bootcamp/portfolio_project/rxassist-ai/data/leaflets/estrazione_farmaci.xlsx"
+
+    # Read the Excel file and extract the drug names (adjust column name if needed)
+    drugs = parse_drugs_file(drugs_file)
+
+    # Download leaflets for the drugs
+    download_leaflets_for_drugs(list(drugs))
