@@ -65,7 +65,9 @@ def score_mapping(drug_name: str, package: str) -> float:
     return fuzz.token_sort_ratio(normalize(drug_name), package)
 
 
-def best_mapping(drug_name, mappings: List[Tuple[str, float]]) -> Tuple[str, float]:
+def best_mapping(
+    drug_name, mappings: List[Tuple[str, float]]
+) -> Tuple[str, float] | None:
     """
     Returns the best mapping from a list of (package, score) tuples.
     Returns None if no valid mappings are found.
@@ -189,6 +191,10 @@ def map_drug_to_leaflet(
                 (index for package, index in mappings if package == match), None
             )
 
+            if leaflet_index is None:
+                print(f"❌ Could not find leaflet index for match: {match}")
+                continue
+
             matched_leaflet = leaflets[leaflet_index][0]
 
             save_matched_leaflet(matched_leaflet, processed_dir, aic, fi_file)
@@ -225,57 +231,3 @@ def map_drugs_to_leaflet(drugs_file: str, raw_dir: str, processed_dir: str) -> N
                 )
                 csvfile.flush()  # Ensure it's written immediately
             print("-" * 80)
-
-
-def debug_mapping_for_file(
-    filename: str, processed_dir: str, raw_dir: str = "data/leaflets/raw"
-):
-    """
-    Debugging function to trace the mapping process for a specific file.
-    Compares drug name with all packages in the corresponding leaflets.
-    """
-    # Ensure filename is valid
-    if not filename or not isinstance(filename, str):
-        print(f"Invalid filename: {filename}")
-        return
-
-    # Step 1: Look for foglio illustrativo patterns - USE THE SAME PATTERN AS get_leaflets
-    pattern = re.compile(
-        r"^\*\*[^*\n]*foglio illustrativo[^*\n]*\*\*$",
-        flags=re.MULTILINE | re.IGNORECASE,
-    )
-    matches = list(pattern.finditer(md_text))
-    print(f"   Step 1: Found {len(matches)} 'foglio illustrativo' matches")
-
-    for i, match in enumerate(matches):
-        print(
-            f"      Match {i}: '{match.group(0)}' at position {match.start()}-{match.end()}"
-        )
-
-    # ... rest of the code remains the same ...
-    fi_files = glob.glob(f"data/leaflets/raw/FI_*_{filename}.pdf")
-
-    for fi_file in fi_files:
-        md_text = convert_pdf_to_markdown(fi_file)
-
-        leaflets = get_leaflets(md_text)
-        if len(leaflets) == 1 and isinstance(leaflets[0], str):
-            print(f"⚠️  No valid 'foglio illustrativo' header found in: {fi_file}")
-            continue  # Skip to the next file
-
-        if leaflets:
-            for index, (leaflet, packages) in enumerate(leaflets):
-                print(f"   Leaflet {index + 1}: {len(packages)} packages found")
-                for package in packages:
-                    score = score_mapping(filename, package)
-                    print(f"      Package: {package} - Score: {score}")
-        else:
-            print(f"❌ No valid leaflets found in {fi_file}")
-
-
-if __name__ == "__main__":
-    map_drugs_to_leaflet(
-        "data/leaflets/estrazione_farmaci.xlsx",
-        "data/leaflets/raw",
-        "data/leaflets/processed",
-    )

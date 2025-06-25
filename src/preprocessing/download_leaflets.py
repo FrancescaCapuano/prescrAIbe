@@ -123,7 +123,7 @@ def parse_drugs_file(
     df["aic6"] = df["code"].astype(str).str.zfill(9).str[:6]
 
     if aic:
-        return df[["name", "code", "aic6"]].itertuples(index=False, name=None)
+        return set(df[["name", "code", "aic6"]].itertuples(index=False, name=None))
 
     # Return as set of tuples (name, aic6)
     return set(df[["name", "aic6"]].itertuples(index=False, name=None))
@@ -154,15 +154,3 @@ def download_leaflets_for_drugs(
             )
             print("-" * 40)
     print(f"Failed downloads appended to {failed_csv}")
-
-
-if __name__ == "__main__":
-
-    # Path to your Excel file
-    drugs_file = "/home/francesca/Desktop/DS Bootcamp/portfolio_project/rxassist-ai/data/leaflets/estrazione_farmaci.xlsx"
-
-    # Read the Excel file and extract the drug names (adjust column name if needed)
-    drugs = parse_drugs_file(drugs_file)
-
-    # Download leaflets for the drugs
-    download_leaflets_for_drugs(list(drugs))

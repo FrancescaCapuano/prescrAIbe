@@ -11,8 +11,12 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import argparse
-from src.preprocessing.download_leaflets import download_leaflets_for_drugs
-from src.preprocessing.parse_leaflets import convert_pdfs_to_markdown_for_drugs
+from src.preprocessing.download_leaflets import (
+    download_leaflets_for_drugs,
+    parse_drugs_file,
+)
+from src.preprocessing.map_leaflets import map_drugs_to_leaflet
+from src.preprocessing.parse_leaflets import extract_section_from_leaflets
 import pdb
 
 
@@ -39,25 +43,27 @@ def parse_args():
 
 def main():
     args = parse_args()
-    if args.drugs:
-        drugs = args.drugs
-    else:
-        with open(args.drugs_file) as f:
-            drugs = [line.strip() for line in f if line.strip()]
 
+    # Parse the drugs file to get a list of drugs
+    drugs = parse_drugs_file(args.drugs_file)
+
+    # Download leaflets for the drugs
     print(f"Downloading leaflets for: {drugs}")
-    # download_leaflets_for_drugs(drugs, base_dir=args.raw_dir)
+    download_leaflets_for_drugs(list(drugs), base_dir=args.raw_dir)
 
-    pdb.set_trace()  # For debugging purposes, remove in production
-
-    """
-    print("Parsing downloaded leaflets...")
-    convert_pdfs_to_markdown_for_drugs(
-        drugs, raw_dir=args.raw_dir, processed_dir=args.processed_dir
+    # Map drugs to leaflets
+    map_drugs_to_leaflet(
+        args.drugs_file,
+        args.raw_dir,
+        args.processed_dir,
     )
 
-    print("Ingestion pipeline completed.")
-    """
+    # Extract a specific section from the leaflets
+    extract_section_from_leaflets(
+        args.processed_dir,
+        "data/leaflets/sections",
+        section_num=2,  # Example section number, adjust as needed
+    )
 
 
 if __name__ == "__main__":
