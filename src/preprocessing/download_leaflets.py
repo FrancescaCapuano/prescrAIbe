@@ -103,20 +103,27 @@ def split_name_and_dosage(row):
         return pd.Series({"name": row["name"], "dosaggio": row["name"]})
 
 
-def parse_drugs_file(drugs_file: str) -> set:
+def parse_drugs_file(
+    drugs_file: str, split_name: bool = True, aic: bool = False
+) -> set:
     """
     Reads an Excel file containing drug names and codes and returns a set of (drug_name, aic6) tuples.
     aic6 is the first 6 digits of the 'code' column.
     Assumes columns are named 'name' and 'code'.
     """
     df = pd.read_excel(drugs_file)
-    df[["name", "dosaggio"]] = df.apply(split_name_and_dosage, axis=1)
+
+    if split_name:
+        df[["name", "dosaggio"]] = df.apply(split_name_and_dosage, axis=1)
 
     # Drop rows with missing values in either column
     df = df.dropna(subset=["name", "code"])
 
     # Extract aic6 as the first 6 digits of the code (as string, padded if needed)
     df["aic6"] = df["code"].astype(str).str.zfill(9).str[:6]
+
+    if aic:
+        return df[["name", "code", "aic6"]].itertuples(index=False, name=None)
 
     # Return as set of tuples (name, aic6)
     return set(df[["name", "aic6"]].itertuples(index=False, name=None))
