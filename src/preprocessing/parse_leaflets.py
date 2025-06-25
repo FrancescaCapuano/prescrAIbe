@@ -1,39 +1,104 @@
-import pymupdf4llm
-import pathlib
+import re
 import os
-from typing import List
+from pathlib import Path
+from typing import List, Tuple
 
 
-def convert_pdf_to_markdown(pdf_path: str, output_md_path: str) -> str:
+def extract_numbered_sections(
+    md_text: str, debug: bool = False
+) -> List[Tuple[int, str, str]]:
     """
-    Converts a PDF to markdown using pymupdf4llm and writes it to a file.
+    Extracts all numbered sections from the cleaned markdown text.
+    Returns a list of (section_number, title, section_content).
     """
-    md_text = pymupdf4llm.to_markdown(pdf_path)
-    pathlib.Path(output_md_path).parent.mkdir(parents=True, exist_ok=True)
-    pathlib.Path(output_md_path).write_bytes(md_text.encode("utf-8"))
-    print(f"Markdown written to {output_md_path}")
-    return md_text
+    # Step 1: Normalize strikethrough and bold
+    clean_text = re.sub(r"~~\*\*(.+?)\*\*~~", r"\1", md_text)
+    clean_text = re.sub(r"\*\*(.+?)\*\*", r"\1", clean_text)
+
+    # DEBUG: Only print if debug=True
+    if debug:
+        lines = clean_text.split("\n")
+        for i, line in enumerate(lines[:20]):  # First 20 lines
+            if "2." in line or "Cosa" in line:
+                print(f"DEBUG Line {i}: '{line}'")
+
+    # Step 2: Find all headers and their positions - Updated pattern
+    pattern = re.compile(r"^\s*(\d+)\s*[\.\-]?\s+(.+)$", re.MULTILINE)
+    headers = []
+    for match in pattern.finditer(clean_text):
+        section = int(match.group(1))
+        title = match.group(2).strip().lower()
+        start_idx = match.start()
+        headers.append((section, title, start_idx))
+        if debug:
+            print(f"DEBUG Found header: {section}. {title}")  # Debug print
+
+    # Step 3: Extract section content between headers
+    results = []
+    for idx, (section, title, start_idx) in enumerate(headers):
+        end_idx = headers[idx + 1][2] if idx + 1 < len(headers) else None
+        section_content = clean_text[start_idx:end_idx].strip()
+        results.append((section, title, section_content))
+
+    return results
 
 
-def process_pdf_directory(input_dir: str, output_dir: str) -> None:
+def get_sections_by_number(md_text: str, section_num: int, debug: bool = False) -> list:
     """
-    Processes all PDF files in the input directory and saves their markdown versions in the output directory.
+    Returns a list of unique section contents for the given section number, preserving order.
+    Skips sections where the content is just the header.
     """
-    for file_name in os.listdir(input_dir):
-        if file_name.lower().endswith(".pdf"):
-            input_path = os.path.join(input_dir, file_name)
-            output_path = os.path.join(output_dir, file_name.replace(".pdf", ".md"))
-            convert_pdf_to_markdown(input_path, output_path)
+    sections = extract_numbered_sections(md_text, debug=debug)
+    seen = set()
+    unique_sections = []
+    for sec, title, content in sections:
+        header_str = f"{sec}. {title}"
+        if (
+            sec == section_num
+            and content not in seen
+            and content.strip().lower() != header_str
+        ):
+            unique_sections.append(content)
+            seen.add(content)
+    return unique_sections
 
 
-def convert_pdfs_to_markdown_for_drugs(
-    drugs: List[str], raw_dir: str = "data/raw", processed_dir: str = "data/interim"
-) -> None:
+def extract_section_from_leaflets(
+    input_dir: str, output_dir: str, section_num: int = 1
+):
     """
-    Iterates over a list of drugs and processes their corresponding PDF files,
-    converting them to markdown. Allows custom raw and processed directories.
+    Extracts a specific section from all markdown files in the input directory
+    and saves them to the output directory.
     """
-    for drug in drugs:
-        drug_raw_dir = os.path.join(raw_dir, drug)
-        drug_processed_dir = os.path.join(processed_dir, drug)
-        process_pdf_directory(drug_raw_dir, drug_processed_dir)
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    i = 0
+    deleted_files = []
+
+    for filename in os.listdir(input_dir):
+        if filename.endswith(".md"):
+            with open(os.path.join(input_dir, filename), "r", encoding="utf-8") as f:
+                md_text = f.read()
+
+            sections = get_sections_by_number(md_text, section_num)
+            if sections:
+                output_filename = os.path.join(output_dir, filename)
+                with open(output_filename, "w", encoding="utf-8") as out_f:
+                    out_f.write("\n\n".join(sections))
+                # print(f"Extracted section {section_num} from {filename} to {output_filename}")
+            else:
+                print(f"No section {section_num} found in {filename}")
+                i += 1
+                file_path = os.path.join(input_dir, filename)
+
+                output_filename = os.path.join(output_dir, filename)
+                with open(output_filename, "w", encoding="utf-8") as out_f:
+                    out_f.write(md_text)
+
+    print(f"Total files with no section {section_num}: {i}")
+
+
+if __name__ == "__main__":
+    extract_section_from_leaflets(
+        "data/leaflets/processed", "data/leaflets/sections", section_num=2
+    )
