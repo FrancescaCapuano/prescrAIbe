@@ -212,10 +212,10 @@ def process_single_leaflet(
 
 
 def extract_contraindications(
-    system_prompt_path: str = "../../data/prompts/system_prompt.txt",
-    user_prompt_path: str = "../../data/prompts/user_prompt_template.txt",
-    leaflet_sections_dir: str = "../../data/leaflet/sections",
-    output_dir: str = "../../data/extracted_contraindications",
+    system_prompt_path: str = "data/prompts/system_prompt.txt",
+    user_prompt_path: str = "data/prompts/user_prompt_template.txt",
+    leaflet_sections_dir: str = "data/leaflet/sections",
+    output_dir: str = "data/extracted_contraindications",
     model: str = DEFAULT_MODEL,
     temperature: float = DEFAULT_TEMPERATURE,
     save_json: bool = True,

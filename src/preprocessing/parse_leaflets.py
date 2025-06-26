@@ -4,75 +4,133 @@ from pathlib import Path
 from typing import List, Tuple
 
 
-def extract_numbered_sections(
-    md_text: str, debug: bool = False
-) -> List[Tuple[int, str, str]]:
+def extract_numbered_sections(md_text: str) -> List[Tuple[int, str, str]]:
     """
     Extracts all numbered sections from the cleaned markdown text.
     Returns a list of (section_number, title, section_content).
     """
-    # Step 1: Normalize strikethrough and bold
-    clean_text = re.sub(r"~~\*\*(.+?)\*\*~~", r"\1", md_text)
-    clean_text = re.sub(r"\*\*(.+?)\*\*", r"\1", clean_text)
+    # Step 1: Remove AIFA metadata completely
+    clean_text = re.sub(
+        r"~~Documento~~ ~~reso~~ ~~disponibile~~ ~~da~~ ~~AIFA~~.*?~~",
+        "",
+        md_text,
+        flags=re.DOTALL,
+    )
 
-    # Step 2: Find all headers and their positions
-    pattern = re.compile(r"^\s*(\d+)\s*[\.\-]?\s+(.+)$", re.MULTILINE)
-    headers = []
+    # Clean strikethrough in different formats
+    clean_text = re.sub(r"~~\*\*(.+?)\*\*~~", r"\1", clean_text)  # ~~**text**~~
+    clean_text = re.sub(r"~~(.+?)~~", r"\1", clean_text)  # ~~text~~
+    clean_text = re.sub(r"\*\*(.+?)\*\*", r"\1", clean_text)  # **text**
 
-    # Define patterns to filter out fake headers
-    fake_header_patterns = [
-        r"documento.*reso.*disponibile.*da.*aifa",
+    # Fix spaced letters caused by partial strikethrough
+    clean_text = re.sub(
+        r"\bs\s*a\s*p\s*e\s*r\s*e\b", "sapere", clean_text, flags=re.IGNORECASE
+    )
+    clean_text = re.sub(r"\bd\s*e\s*v\s*e\b", "deve", clean_text, flags=re.IGNORECASE)
+    clean_text = re.sub(r"\bc\s*o\s*s\s*a\b", "cosa", clean_text, flags=re.IGNORECASE)
+    clean_text = re.sub(
+        r"\bp\s*r\s*i\s*m\s*a\b", "prima", clean_text, flags=re.IGNORECASE
+    )
+    clean_text = re.sub(
+        r"\bu\s*s\s*a\s*r\s*e\b", "usare", clean_text, flags=re.IGNORECASE
+    )
+    clean_text = re.sub(r"\bc\s*o\s*m\s*e\b", "come", clean_text, flags=re.IGNORECASE)
+
+    # Fix extra spaces around dots
+    clean_text = re.sub(r"(\d+)\s*\.\s+", r"\1. ", clean_text)
+
+    # Remove AIFA disclaimer text
+    clean_text = re.sub(
+        r"Esula dalla competenza dell'AIFA.*?titolare AIC\)",
+        "",
+        clean_text,
+        flags=re.DOTALL,
+    )
+
+    # Step 2: Define section patterns
+    valid_section_patterns = [
+        (1, r"^\s*1\s*\.\s+(Cos[aè].*e a cosa serve|What.*is.*and what.*is.*used for)"),
+        (
+            2,
+            r"^\s*2\s*\.\s+(?:Cosa\s+deve\s+sapere\s+prima|Che cosa deve sapere|Prima\s+di|What.*you\s+need\s+to\s+know\s+before|Before.*you.*take)",
+        ),
+        (
+            3,
+            r"^\s*3\s*\.\s+(Come.*(?:usare|prendere|viene.*somministrato|dato)|How\s+to.*(?:take|use))",
+        ),
+        (4, r"^\s*4\s*\.\s+(Possibili effetti|Possible side effects|Side effects)"),
+        (5, r"^\s*5\s*\.\s+(Come conservare|How to store)"),
+        (
+            6,
+            r"^\s*6\s*\.\s+(Contenuto.*confezione|Contents.*of.*pack|Package contents)",
+        ),
     ]
 
-    for match in pattern.finditer(clean_text):
-        section = int(match.group(1))
-        title = match.group(2).strip()
+    # Add patterns for section headers without numbers
+    unnumbered_section_patterns = [
+        (2, r"^\s*CONTROINDICAZIONI\s*$"),
+        (2, r"^\s*Controindicazioni\s*$"),
+    ]
 
-        # Check if this is a fake header
-        is_fake = False
-        title_lower = title.lower()
+    headers = []
 
-        for fake_pattern in fake_header_patterns:
-            if re.search(fake_pattern, title_lower):
-                is_fake = True
-                if debug:
-                    print(f"🚫 Skipping fake header: {section}. {title}")
-                break
-
-        # Only add real headers
-        if not is_fake:
+    # Find numbered sections
+    for section_num, pattern in valid_section_patterns:
+        matches = re.finditer(pattern, clean_text, re.MULTILINE | re.IGNORECASE)
+        for match in matches:
+            full_match = match.group(0)
+            title = full_match.split(".", 1)[1].strip()
             start_idx = match.start()
-            headers.append((section, title, start_idx))
-            if debug:
-                print(f"✅ Found real header: {section}. {title}")
+            headers.append((section_num, title, start_idx))
 
-    # Step 3: Extract section content between headers
+    # Find unnumbered sections (only if numbered version not found)
+    found_sections = {header[0] for header in headers}
+
+    for section_num, pattern in unnumbered_section_patterns:
+        if section_num not in found_sections:
+            matches = re.finditer(pattern, clean_text, re.MULTILINE | re.IGNORECASE)
+            for match in matches:
+                title = match.group(0).strip()
+                start_idx = match.start()
+                headers.append((section_num, title, start_idx))
+
+    # Sort headers by their position in the document
+    headers.sort(key=lambda x: x[2])
+
+    # Extract section content between headers
     results = []
     for idx, (section, title, start_idx) in enumerate(headers):
         end_idx = headers[idx + 1][2] if idx + 1 < len(headers) else None
         section_content = clean_text[start_idx:end_idx].strip()
-        results.append((section, title, section_content))
+
+        # Remove the header line from content
+        lines = section_content.split("\n")
+        if lines and (
+            re.match(r"^\s*\d+\s*\.", lines[0])
+            or lines[0].strip().upper() in ["CONTROINDICAZIONI"]
+        ):
+            section_content = "\n".join(lines[1:]).strip()
+
+        # Only add if there's actual content
+        if section_content:
+            results.append((section, title, section_content))
 
     return results
 
 
-def get_sections_by_number(md_text: str, section_num: int, debug: bool = False) -> list:
+def get_sections_by_number(md_text: str, section_num: int) -> list:
     """
-    Returns a list of unique section contents for the given section number, preserving order.
-    Skips sections where the content is just the header.
+    Returns a list of unique section contents for the given section number.
     """
-    sections = extract_numbered_sections(md_text, debug=debug)
+    sections = extract_numbered_sections(md_text)
     seen = set()
     unique_sections = []
+
     for sec, title, content in sections:
-        header_str = f"{sec}. {title}"
-        if (
-            sec == section_num
-            and content not in seen
-            and content.strip().lower() != header_str
-        ):
+        if sec == section_num and content not in seen:
             unique_sections.append(content)
             seen.add(content)
+
     return unique_sections
 
 
@@ -83,50 +141,30 @@ def extract_section_from_leaflets(
     Extracts a specific section from all markdown files in the input directory
     and saves them to the output directory.
     """
-
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    i = 0
+    files_without_section = 0
     files_processed = 0
 
     for filename in os.listdir(input_dir):
         if filename.endswith(".md"):
             files_processed += 1
-            print(f"\n📄 Processing: {filename}")
 
             with open(os.path.join(input_dir, filename), "r", encoding="utf-8") as f:
                 md_text = f.read()
 
-            # Show all numbered sections found in this file
-            all_sections = extract_numbered_sections(md_text, debug=False)
-            if all_sections:
-                print(f"📋 Found {len(all_sections)} numbered sections:")
-                for sec, title, content in all_sections:
-                    print(f"   {sec}. {title}")
-            else:
-                print(f"❌ No numbered sections found!")
-
-            # Extract the requested section
             sections = get_sections_by_number(md_text, section_num)
+            output_filename = os.path.join(output_dir, filename)
+
             if sections:
-                output_filename = os.path.join(output_dir, filename)
+                final_content = "\n\n".join(sections)
                 with open(output_filename, "w", encoding="utf-8") as out_f:
-                    out_f.write("\n\n".join(sections))
-                print(f"✅ Extracted section {section_num}")
+                    out_f.write(final_content)
             else:
-                print(f"❌ No section {section_num} found - saving whole document")
-                i += 1
+                files_without_section += 1
 
-                output_filename = os.path.join(output_dir, filename)
-                with open(output_filename, "w", encoding="utf-8") as out_f:
-                    out_f.write(md_text)
-
-    print(f"\n📊 SUMMARY:")
+    print(f"📊 SUMMARY:")
     print(f"Files processed: {files_processed}")
-    print(f"Files with section {section_num}: {files_processed - i}")
-    print(f"Files without section {section_num}: {i}")
-
-
-if __name__ == "__main__":
-    extract_section_from_leaflets(
-        "data/leaflets/processed", "data/leaflets/sections", section_num=2
+    print(
+        f"Files with section {section_num}: {files_processed - files_without_section}"
     )
+    print(f"Files without section {section_num}: {files_without_section}")
