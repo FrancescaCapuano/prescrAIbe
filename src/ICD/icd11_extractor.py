@@ -53,39 +53,378 @@ class ICD11Extractor:
         self.digit_lengths = digit_lengths  # None means all lengths
 
         # ICD-11 Chapter mapping (approximate - will be refined when we get actual data)
+        # Updated chapter_info dictionary based on official ICD-11 structure
+        # Source: https://icdcdn.who.int/icd11referenceguide/en/html/index.html
+
         self.chapter_info = {
-            1: {"keywords": ["infectious", "parasitic"], "code_range": "1"},
-            2: {"keywords": ["neoplasms"], "code_range": "2"},
-            3: {"keywords": ["blood", "immune"], "code_range": "3"},
+            1: {
+                "title": "Certain infectious or parasitic diseases",
+                "keywords": [
+                    "infectious",
+                    "parasitic",
+                    "bacteria",
+                    "virus",
+                    "infection",
+                    "antimicrobial",
+                ],
+                "code_range": "1",  # Codes starting with 1 (e.g., 1A00-1G9Z)
+                "new_in_icd11": False,
+                "description": "Includes diseases generally recognized as communicable or transmissible, antimicrobial resistance codes",
+            },
+            2: {
+                "title": "Neoplasms",
+                "keywords": [
+                    "neoplasm",
+                    "cancer",
+                    "tumor",
+                    "tumour",
+                    "malignant",
+                    "benign",
+                    "carcinoma",
+                ],
+                "code_range": "2",  # Codes starting with 2 (e.g., 2A00-2F9Z)
+                "new_in_icd11": False,
+                "description": "All neoplasms, whether functionally active or not",
+            },
+            3: {
+                "title": "Diseases of the blood or blood-forming organs",
+                "keywords": [
+                    "blood",
+                    "hematologic",
+                    "haematologic",
+                    "anemia",
+                    "anaemia",
+                    "bleeding",
+                ],
+                "code_range": "3",  # Codes starting with 3 (e.g., 3A00-3C9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of blood and blood-forming organs and certain immune mechanism disorders",
+            },
             4: {
-                "keywords": ["endocrine", "nutritional", "metabolic"],
-                "code_range": "5",
+                "title": "Diseases of the immune system",
+                "keywords": [
+                    "immune",
+                    "immunodeficiency",
+                    "allergy",
+                    "hypersensitivity",
+                    "autoimmune",
+                ],
+                "code_range": "4",  # Codes starting with 4 (e.g., 4A00-4B9Z)
+                "new_in_icd11": True,
+                "description": "NEW CHAPTER: Primary immunodeficiencies, allergic and hypersensitivity conditions",
             },
             5: {
-                "keywords": ["mental", "behavioural", "neurodevelopmental"],
-                "code_range": "6",
+                "title": "Endocrine, nutritional or metabolic diseases",
+                "keywords": [
+                    "endocrine",
+                    "hormone",
+                    "diabetes",
+                    "thyroid",
+                    "metabolic",
+                    "nutrition",
+                ],
+                "code_range": "5",  # Codes starting with 5 (e.g., 5A00-5D9Z)
+                "new_in_icd11": False,
+                "description": "Disorders of internal secretion and metabolism",
             },
-            6: {"keywords": ["sleep-wake"], "code_range": "7"},
-            7: {"keywords": ["nervous"], "code_range": "8"},
-            8: {"keywords": ["eye", "adnexa"], "code_range": "9"},
-            9: {"keywords": ["ear", "mastoid"], "code_range": "AB"},
-            10: {"keywords": ["circulatory"], "code_range": "B"},
-            11: {"keywords": ["respiratory"], "code_range": "C"},
-            12: {"keywords": ["digestive"], "code_range": "D"},
-            13: {"keywords": ["skin"], "code_range": "E"},
-            14: {"keywords": ["musculoskeletal", "connective"], "code_range": "F"},
-            15: {"keywords": ["genitourinary"], "code_range": "G"},
+            6: {
+                "title": "Mental, behavioural or neurodevelopmental disorders",
+                "keywords": [
+                    "mental",
+                    "psychiatric",
+                    "behavioral",
+                    "behavioural",
+                    "neurodevelopmental",
+                    "autism",
+                ],
+                "code_range": "6",  # Codes starting with 6 (e.g., 6A00-6E9Z)
+                "new_in_icd11": False,
+                "description": "Mental, behavioural and neurodevelopmental disorders",
+            },
+            7: {
+                "title": "Sleep-wake disorders",
+                "keywords": [
+                    "sleep",
+                    "wake",
+                    "insomnia",
+                    "hypersomnia",
+                    "circadian",
+                    "sleep disorders",
+                ],
+                "code_range": "7",  # Codes starting with 7 (e.g., 7A00-7B9Z)
+                "new_in_icd11": True,
+                "description": "NEW CHAPTER: Sleep-wake disorders, previously scattered across different chapters",
+            },
+            8: {
+                "title": "Diseases of the nervous system",
+                "keywords": [
+                    "nervous",
+                    "neurological",
+                    "brain",
+                    "spinal",
+                    "nerve",
+                    "stroke",
+                    "dementia",
+                ],
+                "code_range": "8",  # Codes starting with 8 (e.g., 8A00-8E9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of the nervous system, now includes cerebrovascular diseases",
+            },
+            9: {
+                "title": "Diseases of the visual system",
+                "keywords": [
+                    "eye",
+                    "visual",
+                    "vision",
+                    "ophthalmic",
+                    "retina",
+                    "glaucoma",
+                ],
+                "code_range": "9",  # Codes starting with 9 (e.g., 9A00-9D9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of the eye and adnexa",
+            },
+            10: {
+                "title": "Diseases of the ear or mastoid process",
+                "keywords": [
+                    "ear",
+                    "hearing",
+                    "mastoid",
+                    "auditory",
+                    "deafness",
+                    "otitis",
+                ],
+                "code_range": "A",  # Codes starting with A (e.g., AA00-AB9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of the ear and mastoid process",
+            },
+            11: {
+                "title": "Diseases of the circulatory system",
+                "keywords": [
+                    "circulatory",
+                    "cardiovascular",
+                    "heart",
+                    "blood pressure",
+                    "hypertension",
+                ],
+                "code_range": "B",  # Codes starting with B (e.g., BA00-BE9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of the circulatory system, excludes cerebrovascular diseases (moved to Chapter 8)",
+            },
+            12: {
+                "title": "Diseases of the respiratory system",
+                "keywords": [
+                    "respiratory",
+                    "lung",
+                    "breathing",
+                    "pneumonia",
+                    "asthma",
+                    "pulmonary",
+                ],
+                "code_range": "C",  # Codes starting with C (e.g., CA00-CB9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of the respiratory system",
+            },
+            13: {
+                "title": "Diseases of the digestive system",
+                "keywords": [
+                    "digestive",
+                    "gastrointestinal",
+                    "stomach",
+                    "intestine",
+                    "liver",
+                    "gastro",
+                ],
+                "code_range": "D",  # Codes starting with D (e.g., DA00-DE9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of the digestive system",
+            },
+            14: {
+                "title": "Diseases of the skin",
+                "keywords": ["skin", "dermatological", "dermatitis", "eczema", "rash"],
+                "code_range": "E",  # Codes starting with E (e.g., EA00-EB9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of the skin and subcutaneous tissue",
+            },
+            15: {
+                "title": "Diseases of the musculoskeletal system or connective tissue",
+                "keywords": [
+                    "musculoskeletal",
+                    "bone",
+                    "joint",
+                    "muscle",
+                    "arthritis",
+                    "connective",
+                ],
+                "code_range": "F",  # Codes starting with F (e.g., FA00-FC9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of the musculoskeletal system and connective tissue",
+            },
             16: {
-                "keywords": ["pregnancy", "childbirth", "puerperium"],
-                "code_range": "J",
+                "title": "Diseases of the genitourinary system",
+                "keywords": [
+                    "genitourinary",
+                    "kidney",
+                    "urinary",
+                    "genital",
+                    "renal",
+                    "bladder",
+                ],
+                "code_range": "G",  # Codes starting with G (e.g., GA00-GC9Z)
+                "new_in_icd11": False,
+                "description": "Diseases of the genitourinary system",
             },
-            17: {"keywords": ["perinatal"], "code_range": "K"},
-            18: {"keywords": ["developmental", "anomalies"], "code_range": "L"},
-            19: {"keywords": ["symptoms", "signs", "findings"], "code_range": "M"},
-            20: {"keywords": ["injury", "poisoning", "external"], "code_range": "N"},
-            21: {"keywords": ["external", "morbidity", "mortality"], "code_range": "P"},
-            22: {"keywords": ["factors", "health", "contact"], "code_range": "Q"},
-            23: {"keywords": ["extension"], "code_range": "X"},
+            17: {
+                "title": "Conditions related to sexual health",
+                "keywords": [
+                    "sexual",
+                    "gender",
+                    "reproductive",
+                    "contraception",
+                    "sexuality",
+                ],
+                "code_range": "H",  # Codes starting with H (e.g., HA00-HA9Z)
+                "new_in_icd11": True,
+                "description": "NEW CHAPTER: Sexual health and gender identity conditions",
+            },
+            18: {
+                "title": "Pregnancy, childbirth or the puerperium",
+                "keywords": [
+                    "pregnancy",
+                    "childbirth",
+                    "obstetric",
+                    "maternal",
+                    "puerperium",
+                    "delivery",
+                ],
+                "code_range": "J",  # Codes starting with J (e.g., JA00-JB9Z)
+                "new_in_icd11": False,
+                "description": "Pregnancy, childbirth and the puerperium",
+            },
+            19: {
+                "title": "Certain conditions originating in the perinatal period",
+                "keywords": [
+                    "perinatal",
+                    "neonatal",
+                    "newborn",
+                    "birth",
+                    "fetal",
+                    "infant",
+                ],
+                "code_range": "K",  # Codes starting with K (e.g., KA00-KC9Z)
+                "new_in_icd11": False,
+                "description": "Certain conditions originating in the perinatal period",
+            },
+            20: {
+                "title": "Developmental anomalies",
+                "keywords": [
+                    "developmental",
+                    "congenital",
+                    "anomalies",
+                    "malformations",
+                    "birth defects",
+                ],
+                "code_range": "L",  # Codes starting with L (e.g., LA00-LD9Z)
+                "new_in_icd11": False,
+                "description": "Developmental anomalies",
+            },
+            21: {
+                "title": "Symptoms, signs or clinical findings, not elsewhere classified",
+                "keywords": [
+                    "symptoms",
+                    "signs",
+                    "findings",
+                    "abnormal",
+                    "unspecified",
+                ],
+                "code_range": "M",  # Codes starting with M (e.g., MA00-MG9Z)
+                "new_in_icd11": False,
+                "description": "Symptoms, signs or clinical findings, not elsewhere classified",
+            },
+            22: {
+                "title": "Injury, poisoning or certain other consequences of external causes",
+                "keywords": [
+                    "injury",
+                    "trauma",
+                    "poisoning",
+                    "burn",
+                    "fracture",
+                    "wound",
+                ],
+                "code_range": "N",  # Codes starting with N (e.g., NA00-NF9Z)
+                "new_in_icd11": False,
+                "description": "Injury, poisoning or certain other consequences of external causes",
+            },
+            23: {
+                "title": "External causes of morbidity or mortality",
+                "keywords": [
+                    "external",
+                    "accidents",
+                    "violence",
+                    "transport",
+                    "falls",
+                    "causes",
+                ],
+                "code_range": "P",  # Codes starting with P (e.g., PA00-PE9Z)
+                "new_in_icd11": False,
+                "description": "External causes of morbidity and mortality",
+            },
+            24: {
+                "title": "Factors influencing health status or contact with health services",
+                "keywords": [
+                    "factors",
+                    "health status",
+                    "contact",
+                    "screening",
+                    "prevention",
+                    "counseling",
+                ],
+                "code_range": "Q",  # Codes starting with Q (e.g., QA00-QF9Z)
+                "new_in_icd11": False,
+                "description": "Factors influencing health status and contact with health services",
+            },
+            25: {
+                "title": "Codes for special purposes",
+                "keywords": ["special", "provisional", "research", "experimental"],
+                "code_range": "R",  # Codes starting with R (e.g., RA00-RZ9Z)
+                "new_in_icd11": False,
+                "description": "Codes for special purposes",
+            },
+            26: {
+                "title": "Supplementary Chapter Traditional Medicine Conditions - Module 1",
+                "keywords": [
+                    "traditional",
+                    "medicine",
+                    "tcm",
+                    "chinese",
+                    "ayurveda",
+                    "complementary",
+                ],
+                "code_range": "T",  # Codes starting with T (e.g., TM1-related codes)
+                "new_in_icd11": True,
+                "description": "NEW CHAPTER: Traditional Medicine conditions (supplementary)",
+            },
+            # Special sections and chapters
+            "V": {
+                "title": "Supplementary section for functioning assessment",
+                "keywords": ["functioning", "disability", "capacity", "performance"],
+                "code_range": "V",  # V-codes
+                "new_in_icd11": True,
+                "description": "NEW: Functioning assessment section",
+            },
+            "X": {
+                "title": "Extension Codes",
+                "keywords": [
+                    "extension",
+                    "postcoordination",
+                    "severity",
+                    "laterality",
+                    "anatomical",
+                ],
+                "code_range": "X",  # X-codes (XA, XB, XC, etc.)
+                "new_in_icd11": True,
+                "description": "Extension codes for postcoordination (cannot be used alone)",
+            },
         }
 
         self.token = None
@@ -126,14 +465,33 @@ class ICD11Extractor:
         for filter_item in self.chapter_filter:
             # Check if it's a chapter number
             if filter_item.isdigit():
+                # For numeric filters, we need to determine the chapter number from the URI or position
+                # Extract chapter number from URI or use a different approach
+                # Since the URI structure might contain the chapter info, we can try to extract it
+
+                # Alternative approach: extract chapter number from URI
+                # ICD-11 URIs typically follow a pattern that can help identify the chapter
                 chapter_num = int(filter_item)
+
+                # Get the expected code range for this chapter
                 if chapter_num in self.chapter_info:
-                    # Check if any keyword matches
-                    for keyword in self.chapter_info[chapter_num]["keywords"]:
-                        if keyword in chapter_title_lower:
-                            return True
+                    expected_code_range = self.chapter_info[chapter_num]["code_range"]
+
+                    # Check if the URI or title indicates this is the correct chapter
+                    # We can also check against known chapter titles
+                    expected_title_parts = self.chapter_info[chapter_num][
+                        "title"
+                    ].lower()
+
+                    # Direct title matching (more reliable than keyword matching)
+                    if expected_title_parts in chapter_title_lower:
+                        return True
+
+                    # If direct title matching fails, we could also check the URI structure
+                    # or use the position in the chapters list (passed from calling function)
+
             else:
-                # Check if the filter item is in the chapter title
+                # Check if the filter item is in the chapter title (for string-based filters)
                 if filter_item in chapter_title_lower:
                     return True
 
@@ -433,7 +791,7 @@ class ICD11Extractor:
         return all_parents
 
     def extract_complete_info(self, entity_data):
-        """Extract information based on code length requirements"""
+        """Extract information based on code length requirements with consistent structure"""
 
         def safe_extract_value(data, default=""):
             """Safely extract value from API response, handling different formats"""
@@ -503,9 +861,6 @@ class ICD11Extractor:
         code = entity_data.get("code", "")
         code_length = len(code.replace(".", "").replace("-", "").replace(" ", ""))
 
-        # Base information for all codes with specified order
-        code_info = {}
-
         # For 4-5-6 digit codes, add specific information with specified order
         if code_length >= 4:
             # Get all parent information up to root level
@@ -526,22 +881,36 @@ class ICD11Extractor:
                     elif isinstance(inclusion, str) and inclusion:
                         inclusion_labels.append(inclusion)
 
-            # Build the ordered dictionary for 4-5-6 digit codes
+            # Build the ordered dictionary for 4-5-6 digit codes with consistent structure
             code_info = {
-                "code": code,
-                "title": safe_extract_value(entity_data.get("title")),
-                "fully_specified_name": safe_extract_value(
-                    entity_data.get("fullySpecifiedName")
+                "code": code if code else "",
+                "title": (
+                    safe_extract_value(entity_data.get("title"))
+                    if entity_data.get("title")
+                    else ""
                 ),
-                "definition": safe_extract_value(entity_data.get("definition")),
-                "inclusions": inclusion_labels,
-                "all_labels": all_labels,
+                "fully_specified_name": (
+                    safe_extract_value(entity_data.get("fullySpecifiedName"))
+                    if entity_data.get("fullySpecifiedName")
+                    else ""
+                ),
+                "definition": (
+                    safe_extract_value(entity_data.get("definition"))
+                    if entity_data.get("definition")
+                    else ""
+                ),
+                "inclusions": inclusion_labels if inclusion_labels else [],
+                "all_labels": all_labels if all_labels else [],
                 "parent_info": all_parent_info if all_parent_info else [],
-                "browser_url": entity_data.get("browserUrl", ""),
+                "browser_url": (
+                    entity_data.get("browserUrl", "")
+                    if entity_data.get("browserUrl")
+                    else ""
+                ),
             }
 
         else:
-            # For codes less than 4 digits, include all original information
+            # For codes less than 4 digits, include all original information with consistent structure
             def safe_extract_list(data_list):
                 """Safely extract list of items with labels and references"""
                 if not data_list:
@@ -569,21 +938,33 @@ class ICD11Extractor:
 
                 return processed
 
-            # Include all original fields for shorter codes
+            # Include all original fields for shorter codes with consistent structure
             complete_info = {
                 # Basic identification
                 "@context": entity_data.get("@context", ""),
                 "@id": entity_data.get("@id", ""),
                 "@type": entity_data.get("@type", ""),
                 # Core properties
-                "code": code,
-                "title": safe_extract_value(entity_data.get("title")),
-                "definition": safe_extract_value(entity_data.get("definition")),
-                "long_definition": safe_extract_value(
-                    entity_data.get("longDefinition")
+                "code": code if code else "",
+                "title": (
+                    safe_extract_value(entity_data.get("title"))
+                    if entity_data.get("title")
+                    else ""
                 ),
-                "fully_specified_name": safe_extract_value(
-                    entity_data.get("fullySpecifiedName")
+                "definition": (
+                    safe_extract_value(entity_data.get("definition"))
+                    if entity_data.get("definition")
+                    else ""
+                ),
+                "long_definition": (
+                    safe_extract_value(entity_data.get("longDefinition"))
+                    if entity_data.get("longDefinition")
+                    else ""
+                ),
+                "fully_specified_name": (
+                    safe_extract_value(entity_data.get("fullySpecifiedName"))
+                    if entity_data.get("fullySpecifiedName")
+                    else ""
                 ),
                 # Classification properties
                 "class_kind": entity_data.get("classKind", ""),
@@ -635,19 +1016,33 @@ class ICD11Extractor:
                 "code_first": safe_extract_list(entity_data.get("codeFirst", [])),
                 "code_also": safe_extract_list(entity_data.get("codeAlso", [])),
                 # Diagnostic criteria (for mental health disorders)
-                "diagnostic_criteria": safe_extract_value(
-                    entity_data.get("diagnosticCriteria")
+                "diagnostic_criteria": (
+                    safe_extract_value(entity_data.get("diagnosticCriteria"))
+                    if entity_data.get("diagnosticCriteria")
+                    else ""
                 ),
                 # ICD-O morphology (for neoplasms)
-                "icdo_morphology": safe_extract_value(
-                    entity_data.get("icdoMorphology")
+                "icdo_morphology": (
+                    safe_extract_value(entity_data.get("icdoMorphology"))
+                    if entity_data.get("icdoMorphology")
+                    else ""
                 ),
                 # Additional notes and comments
-                "note": safe_extract_value(entity_data.get("note")),
-                "coding_hint": safe_extract_value(entity_data.get("codingHint")),
+                "note": (
+                    safe_extract_value(entity_data.get("note"))
+                    if entity_data.get("note")
+                    else ""
+                ),
+                "coding_hint": (
+                    safe_extract_value(entity_data.get("codingHint"))
+                    if entity_data.get("codingHint")
+                    else ""
+                ),
                 # Statistical and epidemiological
-                "statistical_note": safe_extract_value(
-                    entity_data.get("statisticalNote")
+                "statistical_note": (
+                    safe_extract_value(entity_data.get("statisticalNote"))
+                    if entity_data.get("statisticalNote")
+                    else ""
                 ),
                 # Other properties that might be present
                 "manifestation_properties": entity_data.get(
@@ -667,29 +1062,41 @@ class ICD11Extractor:
                 ),
             }
 
-            # Remove empty fields to keep the JSON clean
+            # Keep all fields with consistent structure - convert empty strings to empty lists where appropriate
             code_info = {}
             for key, value in complete_info.items():
-                if value:  # Keep non-empty values
-                    if isinstance(value, list) and len(value) == 0:
-                        continue  # Skip empty lists
-                    elif isinstance(value, dict) and len(value) == 0:
-                        continue  # Skip empty dictionaries
-                    elif isinstance(value, str) and value.strip() == "":
-                        continue  # Skip empty strings
-                    else:
-                        code_info[key] = value
-
-        # Remove empty fields from the final result
-        cleaned_info = {}
-        for key, value in code_info.items():
-            if value or value == []:  # Keep empty lists as specified
-                if isinstance(value, str) and value.strip() == "":
-                    continue  # Skip empty strings
+                # Always include the field, but ensure consistent structure
+                if key in [
+                    "parent",
+                    "child",
+                    "ancestor",
+                    "descendant",
+                    "synonym",
+                    "narrower_term",
+                    "inclusion",
+                    "exclusion",
+                    "index_term",
+                    "coded_elsewhere",
+                    "coded_note",
+                    "see_also",
+                    "foundation_child_elsewhere",
+                    "use_additional_code",
+                    "code_first",
+                    "code_also",
+                    "required_postcoordination",
+                    "allowed_postcoordination",
+                    "default_postcoordination",
+                ]:
+                    # These should always be lists
+                    code_info[key] = value if isinstance(value, list) else []
+                elif key in ["manifestation_properties", "scale_info"]:
+                    # These should always be dictionaries
+                    code_info[key] = value if isinstance(value, dict) else {}
                 else:
-                    cleaned_info[key] = value
+                    # String fields - keep as string, even if empty
+                    code_info[key] = value if value else ""
 
-        return cleaned_info
+        return code_info
 
     def process_exclusions(self, exclusions):
         """Process exclusion information"""
@@ -787,20 +1194,644 @@ if __name__ == "__main__":
 
     # === CODE FILTERING ===
     # Option 1: Extract ALL codes (full database) - WARNING: This will take a very long time!
-    code_filter = None
+    # code_filter = None
 
     # Option 2: Extract only codes starting with specific prefixes
     # code_filter = "1"               # Codes starting with 1 (e.g., 1A00, 1C44, 1F25)
     # code_filter = "1A0"  # Codes starting with 1A0 (e.g., 1A00, 1A01, 1A02)
-    # code_filter = ["1A", "1B"]      # Codes starting with 1A or 1B
+    code_filter = [
+        "XM0061",
+        "XM00E9",
+        "XM00H9",
+        "XM00Z1",
+        "XM0179",
+        "XM01R0",
+        "XM01R5",
+        "XM0232",
+        "XM02T2",
+        "XM0366",
+        "XM0386",
+        "XM03C0",
+        "XM04B0",
+        "XM05F4",
+        "XM07P7",
+        "XM0891",
+        "XM08L6",
+        "XM0907",
+        "XM0AK0",
+        "XM0AM0",
+        "XM0B41",
+        "XM0B62",
+        "XM0BC6",
+        "XM0BM0",
+        "XM0BS2",
+        "XM0BY4",
+        "XM0C04",
+        "XM0D44",
+        "XM0DR1",
+        "XM0EC2",
+        "XM0EH6",
+        "XM0ES5",
+        "XM0EX6",
+        "XM0FJ0",
+        "XM0FK9",
+        "XM0FY1",
+        "XM0G40",
+        "XM0G58",
+        "XM0G86",
+        "XM0GB3",
+        "XM0GT6",
+        "XM0JJ6",
+        "XM0K92",
+        "XM0KE3",
+        "XM0KG9",
+        "XM0L39",
+        "XM0LP4",
+        "XM0M17",
+        "XM0M80",
+        "XM0MD1",
+        "XM0N40",
+        "XM0NB5",
+        "XM0PR3",
+        "XM0PX4",
+        "XM0QR2",
+        "XM0QV6",
+        "XM0QY7",
+        "XM0QY9",
+        "XM0R56",
+        "XM0RZ0",
+        "XM0SF4",
+        "XM0SG7",
+        "XM0TB3",
+        "XM0TH7",
+        "XM0TV9",
+        "XM0TX8",
+        "XM0V73",
+        "XM0W28",
+        "XM0WA6",
+        "XM0WA9",
+        "XM0WL1",
+        "XM0XA8",
+        "XM0XN7",
+        "XM0XQ4",
+        "XM0XS0",
+        "XM0XT5",
+        "XM0Y98",
+        "XM0YQ4",
+        "XM0Z74",
+        "XM0ZH6",
+        "XM1021",
+        "XM11G0",
+        "XM12H2",
+        "XM1363",
+        "XM1418",
+        "XM14Y1",
+        "XM1545",
+        "XM1663",
+        "XM16M2",
+        "XM16M4",
+        "XM16X6",
+        "XM1762",
+        "XM17F2",
+        "XM17Q5",
+        "XM1947",
+        "XM1992",
+        "XM19G9",
+        "XM19S7",
+        "XM1A56",
+        "XM1A88",
+        "XM1AE1",
+        "XM1AE2",
+        "XM1AF0",
+        "XM1AH4",
+        "XM1AU2",
+        "XM1BL4",
+        "XM1D37",
+        "XM1D48",
+        "XM1DV5",
+        "XM1E24",
+        "XM1EM9",
+        "XM1EQ5",
+        "XM1EY0",
+        "XM1FG4",
+        "XM1FN8",
+        "XM1FQ3",
+        "XM1FY5",
+        "XM1GH9",
+        "XM1GJ1",
+        "XM1HE9",
+        "XM1J33",
+        "XM1JF3",
+        "XM1JM2",
+        "XM1KF1",
+        "XM1L02",
+        "XM1LD8",
+        "XM1LE7",
+        "XM1LN6",
+        "XM1M89",
+        "XM1MB6",
+        "XM1MV4",
+        "XM1MY0",
+        "XM1N69",
+        "XM1NS5",
+        "XM1NV2",
+        "XM1P52",
+        "XM1PK2",
+        "XM1PM8",
+        "XM1PQ5",
+        "XM1S86",
+        "XM1TB2",
+        "XM1TW0",
+        "XM1UC6",
+        "XM1UJ5",
+        "XM1UP9",
+        "XM1VX3",
+        "XM1WT1",
+        "XM1X04",
+        "XM1X35",
+        "XM1XL9",
+        "XM1XZ4",
+        "XM1YR6",
+        "XM1YU1",
+        "XM1ZR2",
+        "XM21J6",
+        "XM21W4",
+        "XM23X0",
+        "XM23X2",
+        "XM23X8",
+        "XM24L3",
+        "XM2598",
+        "XM26G6",
+        "XM2732",
+        "XM2738",
+        "XM27U4",
+        "XM27Y3",
+        "XM27Z5",
+        "XM28H1",
+        "XM29D2",
+        "XM29R2",
+        "XM29X5",
+        "XM2AE9",
+        "XM2AZ6",
+        "XM2BB9",
+        "XM2BC0",
+        "XM2BC2",
+        "XM2BD5",
+        "XM2BE5",
+        "XM2BF4",
+        "XM2BH3",
+        "XM2BQ5",
+        "XM2BX6",
+        "XM2C70",
+        "XM2CE0",
+        "XM2CE3",
+        "XM2D79",
+        "XM2E62",
+        "XM2EK4",
+        "XM2EK8",
+        "XM2FU2",
+        "XM2FV2",
+        "XM2G85",
+        "XM2GY2",
+        "XM2H01",
+        "XM2HH5",
+        "XM2HX1",
+        "XM2JX3",
+        "XM2KF5",
+        "XM2KQ2",
+        "XM2KR7",
+        "XM2N89",
+        "XM2NF0",
+        "XM2PV9",
+        "XM2Q78",
+        "XM2QW2",
+        "XM2R16",
+        "XM2RB2",
+        "XM2RH1",
+        "XM2SG3",
+        "XM2TA7",
+        "XM2TV3",
+        "XM2VA4",
+        "XM2VG9",
+        "XM2VY1",
+        "XM2W36",
+        "XM2W93",
+        "XM2WR7",
+        "XM2X16",
+        "XM2X70",
+        "XM2XU7",
+        "XM2YA2",
+        "XM2YN7",
+        "XM2YX0",
+        "XM2Z22",
+        "XM2ZT3",
+        "XM30V1",
+        "XM31J1",
+        "XM32L9",
+        "XM33X3",
+        "XM34N7",
+        "XM34P0",
+        "XM34R5",
+        "XM36C7",
+        "XM3709",
+        "XM3757",
+        "XM3834",
+        "XM38G1",
+        "XM38W0",
+        "XM38Z7",
+        "XM39E8",
+        "XM39J1",
+        "XM39J4",
+        "XM3AF3",
+        "XM3AP0",
+        "XM3AW0",
+        "XM3B42",
+        "XM3BY9",
+        "XM3CK7",
+        "XM3CP7",
+        "XM3D40",
+        "XM3DA8",
+        "XM3DP9",
+        "XM3DX7",
+        "XM3EA9",
+        "XM3EF0",
+        "XM3ES0",
+        "XM3FJ3",
+        "XM3FY4",
+        "XM3FY5",
+        "XM3FZ1",
+        "XM3FZ9",
+        "XM3G46",
+        "XM3G74",
+        "XM3JF2",
+        "XM3KE4",
+        "XM3KT4",
+        "XM3LC5",
+        "XM3M65",
+        "XM3M91",
+        "XM3M96",
+        "XM3MD8",
+        "XM3MM6",
+        "XM3NB3",
+        "XM3NC8",
+        "XM3NH9",
+        "XM3NJ2",
+        "XM3NK1",
+        "XM3NZ9",
+        "XM3PV6",
+        "XM3Q99",
+        "XM3QE1",
+        "XM3QL7",
+        "XM3QP5",
+        "XM3R78",
+        "XM3TN8",
+        "XM3VB6",
+        "XM3VN8",
+        "XM3XH8",
+        "XM3XT1",
+        "XM3YZ8",
+        "XM40N4",
+        "XM4321",
+        "XM43H5",
+        "XM44P3",
+        "XM45E1",
+        "XM46N0",
+        "XM46Y1",
+        "XM4882",
+        "XM49C3",
+        "XM49V0",
+        "XM4AC2",
+        "XM4BW2",
+        "XM4BY7",
+        "XM4CB0",
+        "XM4CB3",
+        "XM4CK0",
+        "XM4L76",
+        "XM4MR7",
+        "XM4NS6",
+        "XM4R06",
+        "XM4S70",
+        "XM4TE3",
+        "XM4TF9",
+        "XM4TJ7",
+        "XM4TX6",
+        "XM4UC8",
+        "XM4UE4",
+        "XM4UG8",
+        "XM4W45",
+        "XM4XS8",
+        "XM4XU4",
+        "XM4Y73",
+        "XM4YD3",
+        "XM4YU7",
+        "XM4Z80",
+        "XM5039",
+        "XM5071",
+        "XM50A4",
+        "XM50B6",
+        "XM5151",
+        "XM5174",
+        "XM52C3",
+        "XM52C5",
+        "XM53B3",
+        "XM53K7",
+        "XM5421",
+        "XM5490",
+        "XM54H2",
+        "XM54Q3",
+        "XM54V0",
+        "XM5567",
+        "XM55K4",
+        "XM55M8",
+        "XM55X0",
+        "XM56G1",
+        "XM56Q2",
+        "XM56R9",
+        "XM56V2",
+        "XM5804",
+        "XM58E5",
+        "XM58G8",
+        "XM58Q9",
+        "XM58V1",
+        "XM5911",
+        "XM59S9",
+        "XM59W8",
+        "XM59Y7",
+        "XM5AK0",
+        "XM5AM5",
+        "XM5B21",
+        "XM5BM9",
+        "XM5C83",
+        "XM5CA9",
+        "XM5D25",
+        "XM5DJ5",
+        "XM5E65",
+        "XM5EH9",
+        "XM5EL7",
+        "XM5F09",
+        "XM5F24",
+        "XM5F38",
+        "XM5FS3",
+        "XM5FV8",
+        "XM5GN1",
+        "XM5H13",
+        "XM5H65",
+        "XM5HR7",
+        "XM5HW4",
+        "XM5HX1",
+        "XM5J78",
+        "XM5KH2",
+        "XM5KR7",
+        "XM5L03",
+        "XM5L21",
+        "XM5LE8",
+        "XM5LH2",
+        "XM5MK6",
+        "XM5NA2",
+        "XM5NH2",
+        "XM5P41",
+        "XM5Q94",
+        "XM5U84",
+        "XM5V50",
+        "XM5W16",
+        "XM5W67",
+        "XM5WG7",
+        "XM5WR8",
+        "XM5X38",
+        "XM5XP8",
+        "XM5Y11",
+        "XM5YT6",
+        "XM5YV2",
+        "XM5YV7",
+        "XM5ZF9",
+        "XM5ZJ4",
+        "XM6000",
+        "XM6076",
+        "XM61M4",
+        "XM63C5",
+        "XM63U8",
+        "XM6635",
+        "XM66Z7",
+        "XM6709",
+        "XM67F1",
+        "XM6859",
+        "XM6882",
+        "XM68C9",
+        "XM6A31",
+        "XM6A87",
+        "XM6CP3",
+        "XM6DJ2",
+        "XM6EB1",
+        "XM6FE5",
+        "XM6FQ2",
+        "XM6FX9",
+        "XM6GM2",
+        "XM6GU7",
+        "XM6H15",
+        "XM6HP7",
+        "XM6HZ8",
+        "XM6KR6",
+        "XM6LL4",
+        "XM6LL5",
+        "XM6NP0",
+        "XM6PE4",
+        "XM6PY1",
+        "XM6QA5",
+        "XM6QH4",
+        "XM6U93",
+        "XM6UK4",
+        "XM6VH6",
+        "XM6W91",
+        "XM6WF4",
+        "XM6X33",
+        "XM6XV7",
+        "XM6XW9",
+        "XM6YA3",
+        "XM6Z57",
+        "XM6ZJ9",
+        "XM7134",
+        "XM72P9",
+        "XM73Y7",
+        "XM74S8",
+        "XM75C9",
+        "XM76A0",
+        "XM76E2",
+        "XM76G6",
+        "XM76X5",
+        "XM7762",
+        "XM77E6",
+        "XM77Q2",
+        "XM78T5",
+        "XM79V9",
+        "XM7AX9",
+        "XM7B39",
+        "XM7B62",
+        "XM7BA0",
+        "XM7BE0",
+        "XM7CA8",
+        "XM7CM2",
+        "XM7CN5",
+        "XM7CR8",
+        "XM7CX7",
+        "XM7CZ8",
+        "XM7DD6",
+        "XM7ED8",
+        "XM7EL5",
+        "XM7FG4",
+        "XM7FZ2",
+        "XM7JG0",
+        "XM7JJ2",
+        "XM7JK8",
+        "XM7K06",
+        "XM7K88",
+        "XM7KB7",
+        "XM7KY1",
+        "XM7LD9",
+        "XM7MB5",
+        "XM7MJ9",
+        "XM7MT6",
+        "XM7N15",
+        "XM7NR0",
+        "XM7P94",
+        "XM7QN7",
+        "XM7QX9",
+        "XM7RG5",
+        "XM7S87",
+        "XM7TE7",
+        "XM7TN8",
+        "XM7TP8",
+        "XM7U05",
+        "XM7U59",
+        "XM7U84",
+        "XM7UJ7",
+        "XM7UN8",
+        "XM7UW8",
+        "XM7W63",
+        "XM7WM1",
+        "XM81B2",
+        "XM81T5",
+        "XM82G2",
+        "XM82H0",
+        "XM82K6",
+        "XM82Y6",
+        "XM83G3",
+        "XM83H3",
+        "XM83X7",
+        "XM84E3",
+        "XM84R4",
+        "XM85A8",
+        "XM86L8",
+        "XM87D0",
+        "XM87D3",
+        "XM88J8",
+        "XM88M1",
+        "XM88U7",
+        "XM89Q2",
+        "XM8A62",
+        "XM8AA6",
+        "XM8AZ9",
+        "XM8B44",
+        "XM8B47",
+        "XM8BF5",
+        "XM8H37",
+        "XM8HV3",
+        "XM8JX9",
+        "XM8M07",
+        "XM8MB5",
+        "XM8MF4",
+        "XM8PU3",
+        "XM8PV1",
+        "XM8PX9",
+        "XM8QC3",
+        "XM8R10",
+        "XM8R64",
+        "XM8SE2",
+        "XM8TE5",
+        "XM8U54",
+        "XM8UA9",
+        "XM8VJ2",
+        "XM8VR0",
+        "XM8VV0",
+        "XM8VV3",
+        "XM8WE9",
+        "XM8XU3",
+        "XM8YH8",
+        "XM8YX9",
+        "XM8ZH3",
+        "XM90H5",
+        "XM90P2",
+        "XM90U0",
+        "XM90X8",
+        "XM91A0",
+        "XM91N3",
+        "XM91T0",
+        "XM91V9",
+        "XM9217",
+        "XM9359",
+        "XM9524",
+        "XM9588",
+        "XM95D5",
+        "XM95E9",
+        "XM95L9",
+        "XM95M5",
+        "XM9834",
+        "XM98M9",
+        "XM98Y1",
+        "XM98Z3",
+        "XM99B7",
+        "XM99Y1",
+        "XM9A95",
+        "XM9B14",
+        "XM9B73",
+        "XM9B82",
+        "XM9BN0",
+        "XM9BX0",
+        "XM9C09",
+        "XM9C47",
+        "XM9CQ1",
+        "XM9CV4",
+        "XM9CZ8",
+        "XM9DJ3",
+        "XM9EQ8",
+        "XM9F73",
+        "XM9F85",
+        "XM9GV7",
+        "XM9GX9",
+        "XM9HC2",
+        "XM9HN7",
+        "XM9JS2",
+        "XM9KC4",
+        "XM9KE6",
+        "XM9KW2",
+        "XM9L39",
+        "XM9LD3",
+        "XM9MV5",
+        "XM9P91",
+        "XM9QZ9",
+        "XM9S25",
+        "XM9T69",
+        "XM9TZ1",
+        "XM9UE9",
+        "XM9UH2",
+        "XM9UX0",
+        "XM9W70",
+        "XM9WJ0",
+        "XM9WK6",
+        "XM9WW6",
+        "XM9YD2",
+        "XM9YJ8",
+        "XM9Z08",
+        "XM9Z51",
+        "XM9ZV3",
+    ]
 
     # === CHAPTER FILTERING ===
     # Option 1: Extract from ALL chapters
-    # chapter_filter = None
+    chapter_filter = ["Extension Codes"]
 
     # Option 2: Extract from specific chapters by number
-    chapter_filter = 1  # Chapter 1: Certain infectious or parasitic diseases
-    # chapter_filter = [1, 2]         # Chapters 1 and 2
+    # chapter_filter = 1  # Chapter 1: Certain infectious or parasitic diseases
+    # chapter_filter = ["severty scale value"]
 
     # Option 3: Extract from chapters by keyword in title
     # chapter_filter = "infectious"   # Chapters with "infectious" in the title
@@ -848,7 +1879,7 @@ if __name__ == "__main__":
         else:
             filename_parts.append("all_digits")
 
-        filename = f"icd11_{'_'.join(filename_parts)}.json"
+        filename = "icd11_missing_substances.json"
 
         # Save to file in the same directory as this script
         output_file = extractor.output_dir / filename
