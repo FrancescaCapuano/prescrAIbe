@@ -5,12 +5,20 @@ import glob
 import re
 from typing import List, Tuple
 from collections import defaultdict
-from .download_leaflets import parse_drugs_file
 from rapidfuzz import fuzz
 from rapidfuzz import process
 import pandas as pd
 from tqdm import tqdm
 import csv
+
+try:
+    from .download_leaflets import parse_drugs_file
+except ImportError:
+    # If running as script, use absolute import
+    import sys
+
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from preprocessing.download_leaflets import parse_drugs_file
 
 
 def convert_pdf_to_markdown(pdf_path: str) -> str:
@@ -124,9 +132,10 @@ def get_leaflets(md_text: str) -> list:
     """
     Returns a list of (leaflet, packages) tuples.
     """
-    # Updated pattern: only matches single-line bold headers containing "foglio illustrativo"
+    # More specific pattern: only matches bold headers that START with "foglio illustrativo"
+    # and are likely to be actual leaflet headers
     pattern = re.compile(
-        r"^\*\*[^*\n]*foglio illustrativo[^*\n]*\*\*$",
+        r"^\*\*\s*foglio illustrativo[^*\n]*\*\*$",
         flags=re.MULTILINE | re.IGNORECASE,
     )
     matches = list(pattern.finditer(md_text))
@@ -135,16 +144,24 @@ def get_leaflets(md_text: str) -> list:
         print(f"No 'foglio illustrativo' matches found")
         return [(md_text.strip(), ["package"])]
 
-    filtered_matches = [
-        m
-        for m in matches
-        if "foglio illustrativo è stato" not in m.group(0).lower()
-        and "revisione del foglio illustrativo" not in m.group(0).lower()
-        and "contenuto di questo foglio illustrativo" not in m.group(0).lower()
-        and "deve leggere il foglio illustrativo" not in m.group(0).lower()
-        and "attentamente questo foglio illustrativo" not in m.group(0).lower()
-        and "revisione del foglio illustrativo" not in m.group(0).lower()
-    ]
+    # Filter out metadata patterns, but keep valid leaflet headers
+    filtered_matches = []
+    for m in matches:
+        match_text = m.group(0).lower()
+
+        # Only filter out clear metadata patterns
+        is_metadata = any(
+            phrase in match_text
+            for phrase in [
+                "foglio illustrativo è stato",
+                "revisione del foglio illustrativo",
+                "aggiornamento del foglio illustrativo",
+            ]
+        )
+
+        # Keep if it's not metadata
+        if not is_metadata:
+            filtered_matches.append(m)
 
     if not filtered_matches:
         print(f"All matches filtered out")
