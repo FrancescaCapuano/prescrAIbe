@@ -11,7 +11,7 @@ DEEPL_API_KEY = os.getenv(
 )  # Set your DeepL API key as an environment variable
 
 
-def translate_text(text: str, source_lang: str = "IT", target_lang: str = "DE") -> str:
+def translate_text(text: str, source_lang: str = "IT", target_lang: str = "EN") -> str:
     """
     Translates text from source_lang to target_lang using DeepL API.
     """
@@ -49,7 +49,7 @@ def translate_markdown_file(input_md_path: str, output_md_path: str) -> None:
     for para in paragraphs:
         para = para.strip()
         if para:
-            translated = translate_text(para, source_lang="IT", target_lang="DE")
+            translated = translate_text(para, source_lang="IT", target_lang="EN")
             print("ORIGINAL:", para)
             print("TRANSLATED:", translated)
             print("-" * 40)
@@ -64,12 +64,13 @@ def translate_markdown_file(input_md_path: str, output_md_path: str) -> None:
     print(f"Translated markdown written to {output_md_path}")
 
 
-if __name__ == "__main__":
-    # Example usage: translate a specific file
-    input_md_path = (
-        "data/interim/CITALOPRAM/RCP_003602_036327.md"  # Change this path as needed
-    )
-    output_md_path = (
-        "data/interim/CITALOPRAM/translated/RCP_003602_036327_de.md"  # Change as needed
-    )
-    translate_markdown_file(input_md_path, output_md_path)
+def translate_markdown_files(input_dir: str, output_dir: str) -> None:
+    """
+    Translates all markdown files in the input directory and saves them to the output directory.
+    """
+    pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
+    for md_file in pathlib.Path(input_dir).glob("*.md"):
+        output_md_path = pathlib.Path(output_dir) / md_file.name.replace(
+            ".md", "_en.md"
+        )
+        translate_markdown_file(str(md_file), str(output_md_path))
