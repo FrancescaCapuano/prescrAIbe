@@ -17,7 +17,6 @@ from src.preprocessing.download_leaflets import (
 )
 from src.preprocessing.map_leaflets import map_drugs_to_leaflet
 from src.preprocessing.parse_leaflets import extract_section_from_leaflets
-import pdb
 
 
 def parse_args():
@@ -46,7 +45,7 @@ def main():
 
     # Parse the drugs file to get a list of drugs
     drugs = parse_drugs_file(args.drugs_file)
-    """
+
     # Download leaflets for the drugs
     print(f"Downloading leaflets for: {drugs}")
     download_leaflets_for_drugs(list(drugs), base_dir=args.raw_dir)
@@ -57,7 +56,6 @@ def main():
         args.raw_dir,
         args.processed_dir,
     )
-    """
 
     # Extract a specific section from the leaflets
     extract_section_from_leaflets(
