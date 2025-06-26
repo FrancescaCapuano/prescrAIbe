@@ -5,7 +5,7 @@ import glob
 import re
 from typing import List, Tuple
 from collections import defaultdict
-from download_leaflets import parse_drugs_file
+from .download_leaflets import parse_drugs_file
 from rapidfuzz import fuzz
 from rapidfuzz import process
 import pandas as pd
@@ -19,30 +19,44 @@ def convert_pdf_to_markdown(pdf_path: str) -> str:
 
 def extract_packages_from_leaflet(leaflet: str) -> List[str]:
     packages = []
-    empty_line_seen = False  # Tracks if the first empty line has been seen
+    lines = leaflet.split("\n")
 
-    for line in leaflet.split("\n"):
-        # Strip leading/trailing whitespace for accurate checks
-        line = line.strip()
+    # Skip the first line if it contains 'foglio illustrativo'
+    start_idx = 0
+    if lines and "foglio illustrativo" in lines[0].lower():
+        start_idx = 1
 
-        # Skip first line if it contains 'foglio illustrativo'
-        if "foglio illustrativo" in line.lower():
+    # Look at the first 20 lines after the header for packages
+    for i in range(start_idx, min(len(lines), start_idx + 20)):
+        line = lines[i].strip()
+
+        if not line:
             continue
 
-        # Handle empty lines
-        if not line:
-            if not empty_line_seen:
-                empty_line_seen = True  # First empty line: skip
-                continue
-            else:
-                break  # Second empty line: exit loop
+        # Look for bold text OR lines that look like drug names
+        if (
+            line.startswith("**")
+            or "**" in line
+            or
+            # Also look for lines with drug-like patterns
+            any(
+                keyword in line.upper()
+                for keyword in ["MG", "ML", "CPR", "FL", "MCGS", "UI"]
+            )
+        ):
 
-        # If line starts with ** or contains bold text, store it
-        if line.startswith("**") or "**" in line:
             clean_line = line.strip("*").strip()
-            if clean_line:
+            if clean_line and len(clean_line) > 3:  # Avoid very short strings
                 packages.append(clean_line)
-                # print(f"Found package: {clean_line}")
+
+    # If still no packages found, use a fallback
+    if not packages:
+        # Extract any non-empty line from the first 10 lines
+        for i in range(start_idx, min(len(lines), start_idx + 10)):
+            line = lines[i].strip()
+            if line and len(line) > 5:
+                packages.append(line.strip("*").strip())
+                break
 
     return packages
 
@@ -169,9 +183,6 @@ def map_drug_to_leaflet(
         md_text = convert_pdf_to_markdown(fi_file)
 
         leaflets = get_leaflets(md_text)
-        if len(leaflets) == 1 and isinstance(leaflets[0], str):
-            print(f"⚠️  No valid 'foglio illustrativo' header found in: {fi_file}")
-            continue  # Skip to the next file
 
         if leaflets:
             mappings = []
