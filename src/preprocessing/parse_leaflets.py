@@ -15,23 +15,36 @@ def extract_numbered_sections(
     clean_text = re.sub(r"~~\*\*(.+?)\*\*~~", r"\1", md_text)
     clean_text = re.sub(r"\*\*(.+?)\*\*", r"\1", clean_text)
 
-    # DEBUG: Only print if debug=True
-    if debug:
-        lines = clean_text.split("\n")
-        for i, line in enumerate(lines[:20]):  # First 20 lines
-            if "2." in line or "Cosa" in line:
-                print(f"DEBUG Line {i}: '{line}'")
-
-    # Step 2: Find all headers and their positions - Updated pattern
+    # Step 2: Find all headers and their positions
     pattern = re.compile(r"^\s*(\d+)\s*[\.\-]?\s+(.+)$", re.MULTILINE)
     headers = []
+
+    # Define patterns to filter out fake headers
+    fake_header_patterns = [
+        r"documento.*reso.*disponibile.*da.*aifa",
+    ]
+
     for match in pattern.finditer(clean_text):
         section = int(match.group(1))
-        title = match.group(2).strip().lower()
-        start_idx = match.start()
-        headers.append((section, title, start_idx))
-        if debug:
-            print(f"DEBUG Found header: {section}. {title}")  # Debug print
+        title = match.group(2).strip()
+
+        # Check if this is a fake header
+        is_fake = False
+        title_lower = title.lower()
+
+        for fake_pattern in fake_header_patterns:
+            if re.search(fake_pattern, title_lower):
+                is_fake = True
+                if debug:
+                    print(f"🚫 Skipping fake header: {section}. {title}")
+                break
+
+        # Only add real headers
+        if not is_fake:
+            start_idx = match.start()
+            headers.append((section, title, start_idx))
+            if debug:
+                print(f"✅ Found real header: {section}. {title}")
 
     # Step 3: Extract section content between headers
     results = []
@@ -73,29 +86,44 @@ def extract_section_from_leaflets(
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     i = 0
-    deleted_files = []
+    files_processed = 0
 
     for filename in os.listdir(input_dir):
         if filename.endswith(".md"):
+            files_processed += 1
+            print(f"\n📄 Processing: {filename}")
+
             with open(os.path.join(input_dir, filename), "r", encoding="utf-8") as f:
                 md_text = f.read()
 
+            # Show all numbered sections found in this file
+            all_sections = extract_numbered_sections(md_text, debug=False)
+            if all_sections:
+                print(f"📋 Found {len(all_sections)} numbered sections:")
+                for sec, title, content in all_sections:
+                    print(f"   {sec}. {title}")
+            else:
+                print(f"❌ No numbered sections found!")
+
+            # Extract the requested section
             sections = get_sections_by_number(md_text, section_num)
             if sections:
                 output_filename = os.path.join(output_dir, filename)
                 with open(output_filename, "w", encoding="utf-8") as out_f:
                     out_f.write("\n\n".join(sections))
-                # print(f"Extracted section {section_num} from {filename} to {output_filename}")
+                print(f"✅ Extracted section {section_num}")
             else:
-                print(f"No section {section_num} found in {filename}")
+                print(f"❌ No section {section_num} found - saving whole document")
                 i += 1
-                file_path = os.path.join(input_dir, filename)
 
                 output_filename = os.path.join(output_dir, filename)
                 with open(output_filename, "w", encoding="utf-8") as out_f:
                     out_f.write(md_text)
 
-    print(f"Total files with no section {section_num}: {i}")
+    print(f"\n📊 SUMMARY:")
+    print(f"Files processed: {files_processed}")
+    print(f"Files with section {section_num}: {files_processed - i}")
+    print(f"Files without section {section_num}: {i}")
 
 
 if __name__ == "__main__":
