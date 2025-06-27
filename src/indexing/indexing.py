@@ -10,18 +10,8 @@ import numpy as np
 from langchain_core.documents import Document
 import json
 import warnings
-
-# Try different CUDA environment fixes
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-
-# Import torch after setting environment
 import torch
-
-# Force CUDA reinitialization
-if torch.cuda.is_available():
-    torch.cuda.empty_cache()
-    torch.cuda.init()
+import subprocess
 
 
 def split_documents(docs, chunk_size=500, chunk_overlap=200):
@@ -36,13 +26,16 @@ def split_documents(docs, chunk_size=500, chunk_overlap=200):
     return text_splitter.split_documents(docs)
 
 
-def store_embeddings(docs, collection_name):
+def store_embeddings(
+    docs, collection_name, persist_dir="data/vector_db/chroma_langchain_db"
+):
     """
-    Store document embeddings in a local ChromaDB vector database, one collection per drug.
+    Store document embeddings in a local ChromaDB vector database.
 
     Args:
-        splits: List of document chunks to be embedded and stored
-        drug_name: Name of the drug (used for collection name)
+        docs: List of document chunks to be embedded and stored
+        collection_name: Name of the collection
+        persist_dir: Directory where ChromaDB will persist the database
 
     Returns:
         vector_store: The ChromaDB vector store instance
@@ -52,7 +45,6 @@ def store_embeddings(docs, collection_name):
     )
 
     collection_name = f"collection_{collection_name}"
-    persist_dir = os.path.join("data", "vector_db", "chroma_langchain_db")
     os.makedirs(persist_dir, exist_ok=True)
 
     vector_store = Chroma(
@@ -197,9 +189,8 @@ def convert_icd_to_documents(icd_descriptions):
 
 # Test usage
 if __name__ == "__main__":
-    # Diagnose CUDA setup
-    import subprocess
 
+    # Diagnose CUDA setup
     print("🔍 CUDA Diagnostics:")
     try:
         # Check if nvidia-smi works
@@ -235,6 +226,9 @@ if __name__ == "__main__":
     # Convert to Document objects first
     icd_docs = convert_icd_to_documents(icd_descriptions)
 
+    # Define persist directory
+    persist_dir = "../../data/vector_db/chroma_langchain_db"
+
     if chunking_recommended:
         print(f"\n📝 Chunking recommended - splitting documents > 800 characters...")
 
@@ -243,15 +237,15 @@ if __name__ == "__main__":
         print(f"📄 Created {len(chunks)} chunks from {len(icd_docs)} descriptions")
 
         # Store embeddings of chunks
-        vector_store = store_embeddings(chunks, "icd_11")
+        vector_store = store_embeddings(chunks, "icd_11", persist_dir)
 
     else:
         print(f"\n✅ No chunking needed - descriptions are ≤ 800 characters")
         print(f"📄 Using {len(icd_docs)} documents directly (no chunking)")
 
         # Store embeddings of full descriptions
-        vector_store = store_embeddings(icd_docs, "icd_11")
+        vector_store = store_embeddings(icd_docs, "icd_11", persist_dir)
 
     print(f"\n✅ ICD-11 embeddings stored successfully!")
     print(f"🔍 Vector store collection: 'collection_icd_11'")
-    print(f"📁 Persist directory: data/vector_db/chroma_langchain_db")
+    print(f"📁 Persist directory: {persist_dir}")
