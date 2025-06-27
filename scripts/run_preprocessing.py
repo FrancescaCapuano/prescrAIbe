@@ -50,6 +50,7 @@ def main():
     print(f"Downloading leaflets for: {drugs}")
     # download_leaflets_for_drugs(list(drugs), base_dir=args.raw_dir)
 
+    """
     # Map drugs to leaflets
     map_drugs_to_leaflet(
         args.drugs_file,
@@ -57,13 +58,13 @@ def main():
         args.processed_dir,
     )
     """
+
     # Extract a specific section from the leaflets
     extract_section_from_leaflets(
         args.processed_dir,
         "data/leaflets/sections",
         section_num=2,  # Example section number, adjust as needed
     )
-    """
 
 
 if __name__ == "__main__":

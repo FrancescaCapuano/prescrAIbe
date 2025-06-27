@@ -4,18 +4,71 @@ from pathlib import Path
 from typing import List, Tuple
 
 
+def fix_broken_italian_words(text):
+    """Fix common Italian words broken by AIFA watermarks"""
+    import re
+
+    # Medical terms that commonly get broken
+    word_repairs = {
+        r"coagulazi\s+one": "coagulazione",
+        r"com\s+porta": "comporta",
+        r"sanguina\s+mento": "sanguinamento",
+        r"somministra\s+zione": "somministrazione",
+        r"vaccina\s+zione": "vaccinazione",
+        r"gravi\s+danza": "gravidanza",
+        r"allatta\s+mento": "allattamento",
+        r"precau\s+zioni": "precauzioni",
+        r"protezio\s+ne": "protezione",
+        r"infezio\s+ne": "infezione",
+        r"immuno\s+deficienza": "immunodeficienza",
+        r"malat\s+tia": "malattia",
+        r"compo\s+nenti": "componenti",
+        r"allergi\s+ca": "allergica",
+        r"allergi\s+co": "allergico",
+        r"sistema\s+immunitario": "sistema immunitario",
+        r"febbre\s+alta": "febbre alta",
+        r"difetto\s+genetico": "difetto genetico",
+        r"principi\s+attivi": "principi attivi",
+        r"reazio\s+ne": "reazione",
+        r"disturbo\s+della": "disturbo della",
+        # Generic patterns for common Italian endings
+        r"(\w{3,})\s+(zione)\b": r"\1\2",  # *-zione words
+        r"(\w{3,})\s+(mento)\b": r"\1\2",  # *-mento words
+        r"(\w{3,})\s+(tura)\b": r"\1\2",  # *-tura words
+        r"(\w{3,})\s+(tore)\b": r"\1\2",  # *-tore words
+    }
+
+    for pattern, replacement in word_repairs.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+    return text
+
+
 def extract_numbered_sections(md_text: str) -> List[Tuple[int, str, str]]:
     """
     Extracts all numbered sections from the cleaned markdown text.
     Returns a list of (section_number, title, section_content).
     """
-    # Step 1: Remove AIFA metadata completely
+    # Step 1: Remove AIFA metadata completely FIRST
     clean_text = re.sub(
         r"~~Documento~~ ~~reso~~ ~~disponibile~~ ~~da~~ ~~AIFA~~.*?~~",
         "",
         md_text,
         flags=re.DOTALL,
     )
+
+    # CRITICAL: Remove AIFA watermarks that split text
+    clean_text = re.sub(
+        r"Esula dalla competenza dell'AIFA.*?all'immissione in commercio \(o titolare AIC\)\.",
+        "",
+        clean_text,
+        flags=re.DOTALL,
+    )
+
+    # Remove page numbers and dates that appear with watermarks
+    clean_text = re.sub(r"^\s*\d+\s*$", "", clean_text, flags=re.MULTILINE)
+    clean_text = re.sub(r"il \d{2}/\d{2}/\d{4}~~", "", clean_text)
+    clean_text = re.sub(r"~~.*?~~", "", clean_text, flags=re.DOTALL)
 
     # Clean strikethrough in different formats
     clean_text = re.sub(r"~~\*\*(.+?)\*\*~~", r"\1", clean_text)  # ~~**text**~~
@@ -36,18 +89,15 @@ def extract_numbered_sections(md_text: str) -> List[Tuple[int, str, str]]:
     )
     clean_text = re.sub(r"\bc\s*o\s*m\s*e\b", "come", clean_text, flags=re.IGNORECASE)
 
-    # Fix extra spaces around dots
+    # Fix extra spaces and clean up formatting
     clean_text = re.sub(r"(\d+)\s*\.\s+", r"\1. ", clean_text)
+    clean_text = re.sub(r"\s+", " ", clean_text)  # Normalize all whitespace
+    clean_text = re.sub(r"\n\s*\n", "\n", clean_text)  # Remove empty lines
 
-    # Remove AIFA disclaimer text
-    clean_text = re.sub(
-        r"Esula dalla competenza dell'AIFA.*?titolare AIC\)",
-        "",
-        clean_text,
-        flags=re.DOTALL,
-    )
+    # CRITICAL: Fix broken Italian words AFTER removing watermarks
+    clean_text = fix_broken_italian_words(clean_text)
 
-    # Step 2: Define section patterns
+    # Step 2: Define section patterns - ONLY match actual
     valid_section_patterns = [
         (1, r"^\s*1\s*\.\s+(Cos[aè].*e a cosa serve|What.*is.*and what.*is.*used for)"),
         (
