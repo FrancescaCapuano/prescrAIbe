@@ -210,7 +210,7 @@ def process_single_leaflet(
     # Build and send prompt
     user_prompt = build_prompt(user_prompt_template, leaflet_section)
     response = call_llm(
-        prompt=user_prompt[:100],
+        prompt=user_prompt[:],
         system_prompt=system_prompt,
         model=model,
         temperature=temperature,
@@ -248,7 +248,7 @@ def extract_all_contraindications(
     import random
 
     md_files = [f for f in os.listdir(leaflet_sections_dir) if f.endswith(".md")]
-    random.shuffle(md_files)
+    # random.shuffle(md_files)
     total_processed = len(md_files)
 
     for filename in md_files:
