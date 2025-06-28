@@ -18,57 +18,110 @@ class InteractionMatrixBuilder:
     ) -> Dict[Tuple[str, str], List[Dict[str, str]]]:
         """
         Build interaction matrix from ContraindicationRetriever results.
-        Each (AIC, ICD) combination stores a list of unique contraindications (no duplicates).
-
-        Args:
-            retrieval_results: Results from ContraindicationRetriever.process_all_contraindications()
-
-        Returns:
-            Dictionary with (aic, icd_code) tuples as keys, each containing a list of unique contraindication entries
+        Supports both single-AIC and multi-AIC formats.
         """
         interaction_matrix = {}
-
-        # Fix: Get AIC and URL from metadata section
-        metadata = retrieval_results.get("metadata", {})
-        aic = metadata.get("aic", "")
-        aic_url = metadata.get("url", "")
-
-        print(f"🔍 Processing AIC: {aic}")
-
-        # Process each similarity search (each contraindication)
-        similarity_searches = retrieval_results.get("similarity_searches", [])
-
         total_raw_pairs = 0
         total_duplicates_avoided = 0
+
+        # Check if this is the new multi-AIC format
+        if "aic_results" in retrieval_results:
+            # New multi-AIC format
+            aic_results = retrieval_results.get("aic_results", [])
+            print(f"🔍 Processing {len(aic_results)} AICs from multi-AIC format")
+
+            for aic_result in aic_results:
+                aic = aic_result.get("aic", "")
+                aic_url = aic_result.get("aic_url", "")
+                similarity_searches = aic_result.get("similarity_searches", [])
+
+                print(
+                    f"  📋 Processing AIC: {aic} with {len(similarity_searches)} contraindications"
+                )
+
+                # Process this AIC's similarity searches
+                pairs, duplicates = self._process_aic_searches(
+                    aic, aic_url, similarity_searches, interaction_matrix
+                )
+                total_raw_pairs += pairs
+                total_duplicates_avoided += duplicates
+
+        else:
+            # Old single-AIC format
+            metadata = retrieval_results.get("metadata", {})
+            aic = metadata.get("aic", "")
+            aic_url = metadata.get("url", "")
+            similarity_searches = retrieval_results.get("similarity_searches", [])
+
+            print(f"🔍 Processing single AIC: {aic}")
+
+            pairs, duplicates = self._process_aic_searches(
+                aic, aic_url, similarity_searches, interaction_matrix
+            )
+            total_raw_pairs += pairs
+            total_duplicates_avoided += duplicates
+
+        # Calculate statistics
+        total_contraindications = sum(
+            len(contraindications) for contraindications in interaction_matrix.values()
+        )
+        unique_pairs = len(interaction_matrix)
+
+        print(f"✅ Built interaction matrix:")
+        print(f"   📊 Raw (AIC, ICD) pairs found: {total_raw_pairs}")
+        print(f"   🔑 Unique (AIC, ICD) combinations: {unique_pairs}")
+        print(f"   📋 Total unique contraindication entries: {total_contraindications}")
+        print(f"   🚫 Duplicate entries avoided: {total_duplicates_avoided}")
+
+        if unique_pairs > 0:
+            print(
+                f"   📈 Avg contraindications per pair: {total_contraindications/unique_pairs:.2f}"
+            )
+            print(
+                f"   🔄 Deduplication rate: {(1 - unique_pairs/total_raw_pairs)*100:.1f}%"
+            )
+        else:
+            print("   ⚠️ No valid interactions found!")
+
+        return interaction_matrix
+
+    def _process_aic_searches(
+        self,
+        aic: str,
+        aic_url: str,
+        similarity_searches: List[Dict],
+        interaction_matrix: Dict,
+    ) -> Tuple[int, int]:
+        """Process similarity searches for a single AIC."""
+        raw_pairs = 0
+        duplicates_avoided = 0
 
         for search_entry in similarity_searches:
             contraindication_id = search_entry.get("contraindication_id", "")
             original_warning = search_entry.get("original_warning", {})
             warning_ita = original_warning.get("italian", "")
-
             similar_documents = search_entry.get("similar_documents", [])
-
-            print(
-                f"  📋 Processing contraindication {contraindication_id} with {len(similar_documents)} similar documents"
-            )
 
             # Process each similar document (ICD-11 conditions)
             for doc in similar_documents:
                 doc_metadata = doc.get("metadata", {})
 
-                icd_code = doc_metadata.get("code", "")
+                # Handle different metadata key formats
+                icd_code = doc_metadata.get("ICD11_code") or doc_metadata.get(
+                    "code", ""
+                )
                 icd_name = doc_metadata.get("name", "")
                 icd_url = doc_metadata.get("url", "")
 
                 if (
                     icd_code and warning_ita
                 ):  # Only add if we have both AIC and ICD data
-                    total_raw_pairs += 1
+                    raw_pairs += 1
 
                     # Create unique key (aic, icd_code)
                     key = (aic, icd_code)
 
-                    # Create interaction entry (keeping the same structure)
+                    # Create interaction entry
                     interaction_entry = {
                         "aic_url": aic_url,
                         "warning": warning_ita,
@@ -87,30 +140,11 @@ class InteractionMatrixBuilder:
                     )
 
                     if not entry_exists:
-                        # Add this contraindication to the list
                         interaction_matrix[key].append(interaction_entry)
                     else:
-                        total_duplicates_avoided += 1
+                        duplicates_avoided += 1
 
-        # Calculate statistics
-        total_contraindications = sum(
-            len(contraindications) for contraindications in interaction_matrix.values()
-        )
-        unique_pairs = len(interaction_matrix)
-
-        print(f"✅ Built interaction matrix:")
-        print(f"   📊 Raw (AIC, ICD) pairs found: {total_raw_pairs}")
-        print(f"   🔑 Unique (AIC, ICD) combinations: {unique_pairs}")
-        print(f"   📋 Total unique contraindication entries: {total_contraindications}")
-        print(f"   🚫 Duplicate entries avoided: {total_duplicates_avoided}")
-        print(
-            f"   📈 Avg contraindications per pair: {total_contraindications/unique_pairs:.2f}"
-        )
-        print(
-            f"   🔄 Deduplication rate: {(1 - unique_pairs/total_raw_pairs)*100:.1f}%"
-        )
-
-        return interaction_matrix
+        return raw_pairs, duplicates_avoided
 
     def save_interaction_matrix(
         self,
