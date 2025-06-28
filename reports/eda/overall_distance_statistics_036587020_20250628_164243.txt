@@ -1,0 +1,10 @@
+Overall Distance Statistics for AIC: 036587020
+========================================
+Total distances: 7000
+Mean: 1.326227
+Median: 1.287354
+Standard deviation: 0.179601
+Min: 0.797519
+Max: 1.760984
+25th percentile: 1.212515
+75th percentile: 1.386930
