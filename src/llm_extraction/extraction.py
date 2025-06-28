@@ -350,33 +350,3 @@ def extract_sis_from_filename(filename: str) -> str:
 def generate_url(aic6: str, codice_sis: str) -> str:
     """Generate the PDF URL from AIC and SIS codes."""
     return f"https://api.aifa.gov.it/aifa-bdf-eif-be/1.0.0/organizzazione/{codice_sis}/farmaci/{aic6}/stampati?ts=FI"
-
-
-# Update your main section
-if __name__ == "__main__":
-    import sys
-
-    # Check command line arguments
-    test_mode = "--full" not in sys.argv
-    test_count = 5
-
-    if "--count" in sys.argv:
-        try:
-            count_index = sys.argv.index("--count") + 1
-            test_count = int(sys.argv[count_index])
-        except (IndexError, ValueError):
-            print("⚠️  Invalid --count argument, using default 5")
-
-    mode_str = f"TEST ({test_count} files)" if test_mode else "FULL"
-    print(f"🎯 Running in {mode_str} mode")
-    print("💡 Use --full for full processing, --count N to set test count")
-
-    extract_all_contraindications(
-        system_prompt_path="data/prompts/system_prompt.txt",
-        user_prompt_path="data/prompts/user_prompt_template.txt",
-        leaflet_sections_dir="data/leaflets/sections",
-        output_file="data/contraindications/all_contraindications.json",
-        progress_file="data/contraindications/extraction_progress.json",
-        test_mode=test_mode,
-        test_count=test_count,
-    )

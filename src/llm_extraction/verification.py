@@ -90,7 +90,7 @@ def context_is_in_leaflet(context, leaflet, debug=False):
     return False
 
 
-def find_leaflet_file(aic: str, leaflet_sections_dir: str) -> str:
+def find_leaflet_file(aic: str, leaflet_sections_dir: str):
     """Find the corresponding leaflet file for an AIC code."""
     # Look for files ending with the AIC code
     for filename in os.listdir(leaflet_sections_dir):
@@ -357,26 +357,3 @@ def verify_single_entry(
 
         is_verified = context_is_in_leaflet(context, leaflet_content, debug=True)
         print(f"Result: {'✅ VERIFIED' if is_verified else '❌ NOT VERIFIED'}")
-
-
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "--single":
-        # Debug single entry
-        if len(sys.argv) > 2:
-            aic = sys.argv[2]
-            verify_single_entry(aic)
-        else:
-            print("Usage: python verify.py --single <AIC_CODE>")
-    else:
-        # Full verification
-        print("🚀 Running full verification process")
-        print("💡 Use --single <AIC> to debug a specific entry")
-
-        verify_contraindications(
-            contraindications_file="data/contraindications/all_contraindications.json",
-            leaflet_sections_dir="data/leaflets/sections",
-            output_file="data/contraindications/all_contraindications_verified.json",
-            unverified_report_file="data/contraindications/unverified_report.json",
-        )
