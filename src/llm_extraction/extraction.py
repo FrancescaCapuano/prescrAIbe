@@ -29,6 +29,7 @@ class Contraindication(BaseModel):
     pretext: str
     warning_ita: str
     context_eng: str
+    category: str
 
 
 class Contraindications(BaseModel):
@@ -143,6 +144,7 @@ def convert_response_to_json_format(response, aic: str, url: str) -> dict:
             "pretext": contraindication.pretext,
             "warning_ita": contraindication.warning_ita,
             "context_eng": contraindication.context_eng,
+            "category": contraindication.category,
             "extraction_timestamp": datetime.now().isoformat(),
         }
         contraindications_list.append(formatted_item)
