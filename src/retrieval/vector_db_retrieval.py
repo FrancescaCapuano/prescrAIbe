@@ -74,6 +74,12 @@ class ContraindicationRetriever:
         self.collection = self.client.get_collection("collection_icd_11")
         print(f"✅ Connected to collection with {self.collection.count():,} documents")
 
+    def _distance_to_similarity(self, distance: float) -> float:
+        """Convert distance score to similarity score (0-1 range, higher = more similar)."""
+        # For cosine distance: similarity = 1 - distance
+        # Clamp to [0, 1] range to handle numerical precision issues
+        return max(0.0, min(1.0, 1.0 - distance))
+
     def search(
         self,
         query: str,
@@ -101,7 +107,7 @@ class ContraindicationRetriever:
         if not results or not results.get("ids") or not results["ids"][0]:
             return []
 
-        # Format results
+        # Format results (ChromaDB returns distance scores - lower = more similar)
         formatted_results = [
             {
                 "id": results["ids"][0][i],
@@ -111,7 +117,12 @@ class ContraindicationRetriever:
                     if results["metadatas"] and results["metadatas"][0]
                     else {}
                 ),
-                "distance": results["distances"][0][i],
+                "distance": results["distances"][0][
+                    i
+                ],  # Lower distance = higher similarity
+                "similarity": self._distance_to_similarity(
+                    results["distances"][0][i]
+                ),  # Converted to 0-1 scale
             }
             for i in range(len(results["ids"][0]))
             if isinstance(
@@ -130,12 +141,15 @@ class ContraindicationRetriever:
             median = np.median(distances)
             mad = median_abs_deviation(distances)
             robust_z_scores = (distances - median) / mad
+            # Keep results with LOW distances (high similarity) - z < -devs means much lower than median
             formatted_results = [
-                r for r, z in zip(formatted_results, robust_z_scores) if z > devs
+                r for r, z in zip(formatted_results, robust_z_scores) if z < -devs
             ]
 
-        # Sort by distance and deduplicate by unique ICD-11 codes
-        formatted_results.sort(key=lambda x: x["distance"])
+        # Sort by distance (ascending = most similar first) and deduplicate by unique ICD-11 codes
+        formatted_results.sort(
+            key=lambda x: x["distance"]
+        )  # Lower distance = higher similarity
         seen_codes = set()
         unique_results = []
 
