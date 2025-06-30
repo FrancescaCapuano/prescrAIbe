@@ -349,30 +349,3 @@ def process_multiple_retrieval_results(
     print(f"  📊 Matrix density: {stats['matrix_density']:.6f}")
 
     return matrix_file
-
-
-def main():
-    """Demo/test function."""
-    import sys
-
-    if len(sys.argv) < 2:
-        print("Usage:")
-        print("  python interaction_matrix.py <results_file.json>")
-        print("  python interaction_matrix.py --dir <results_directory>")
-        return
-
-    if sys.argv[1] == "--dir":
-        if len(sys.argv) < 3:
-            print("Please specify results directory")
-            return
-        results_dir = sys.argv[2]
-        matrix_file = process_multiple_retrieval_results(results_dir)
-    else:
-        results_file = sys.argv[1]
-        matrix_file = process_retrieval_results_to_matrix(results_file)
-
-    print(f"\n✅ Interaction matrix saved to: {matrix_file}")
-
-
-if __name__ == "__main__":
-    main()
