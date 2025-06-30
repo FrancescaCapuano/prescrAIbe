@@ -2,8 +2,8 @@
 Script to run the ICD-11 indexing pipeline: load, process, and embed ICD-11 descriptions.
 
 Usage:
-    python scripts/run_indexing.py --data-file data/ICD-codes/icd11_vectordb_base.json
-    python scripts/run_indexing.py --chunk-size 600 --chunk-overlap 100
+    python scripts/run_indexing.py
+    python scripts/run_indexing.py --model sentence-transformers/all-MiniLM-L6-v2
 """
 
 import sys
@@ -25,28 +25,10 @@ from src.indexing.indexing import (
 def parse_args():
     parser = argparse.ArgumentParser(description="Run ICD-11 indexing pipeline.")
     parser.add_argument(
-        "--data-file",
+        "--model",
         type=str,
-        default="../../data/ICD-codes/icd11_vectordb_base.json",
-        help="Path to ICD-11 descriptions JSON file",
-    )
-    parser.add_argument(
-        "--persist-dir",
-        type=str,
-        default="../../data/vector_db/chroma_langchain_db",
-        help="Directory to persist ChromaDB database",
-    )
-    parser.add_argument(
-        "--chunk-size",
-        type=int,
-        default=600,
-        help="Maximum chunk size for text splitting",
-    )
-    parser.add_argument(
-        "--chunk-overlap",
-        type=int,
-        default=100,
-        help="Overlap between chunks",
+        default="sentence-transformers/all-mpnet-base-v2",
+        help="HuggingFace embedding model name",
     )
     return parser.parse_args()
 
@@ -54,19 +36,33 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Check if CUDA is available and diagnose setup
-    diagnose_cuda()
+    # Fixed configuration parameters
+    DATA_FILE = "data/ICD-codes/icd11_vectordb_base.json"
+    CHUNK_SIZE = 600
+    CHUNK_OVERLAP = 100
+
+    # Generate persist directory name based on model
+    model_name_clean = args.model.replace("/", "_").replace("-", "_")
+    persist_dir = f"data/vector_dbs/vector_db_{model_name_clean}/chroma_langchain_db"
+
+    print(f"\n📊 Configuration:")
+    print(f"   Data file: {DATA_FILE} (fixed)")
+    print(f"   Persist directory: {persist_dir}")
+    print(f"   Model: {args.model}")
+    print(f"   Chunk size: {CHUNK_SIZE} (fixed)")
+    print(f"   Chunk overlap: {CHUNK_OVERLAP} (fixed)")
 
     # Load ICD-11 data
-    print(f"📂 Loading ICD-11 data from: {args.data_file}")
-    with open(args.data_file, "r", encoding="utf-8") as f:
+    print(f"\n📂 Loading ICD-11 data from: {DATA_FILE}")
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
         icd_descriptions = json.load(f)
     print(f"✅ Loaded {len(icd_descriptions)} ICD descriptions")
 
     # Plot description length distribution
-    chunking_recommended = plot_description_lengths(
-        icd_descriptions, "ICD-11 Description Lengths"
-    )
+    stats = plot_description_lengths(icd_descriptions, "ICD-11 Description Lengths")
+
+    # Decision on chunking
+    chunking_recommended = stats["max"] > 800
 
     # Convert to Document objects
     icd_docs = convert_icd_to_documents(icd_descriptions)
@@ -75,22 +71,27 @@ def main():
     if chunking_recommended:
         print(f"\n📝 Chunking recommended - splitting documents > 800 characters...")
         chunks = split_documents(
-            icd_docs, chunk_size=args.chunk_size, chunk_overlap=args.chunk_overlap
+            icd_docs, chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
         )
         print(f"📄 Created {len(chunks)} chunks from {len(icd_docs)} descriptions")
 
         # Store embeddings of chunks
-        vector_store = store_embeddings(chunks, "icd_11", args.persist_dir)
+        vector_store = store_embeddings(
+            chunks, "icd_11", persist_dir, model_name=args.model
+        )
     else:
         print(f"\n✅ No chunking needed - descriptions are ≤ 800 characters")
         print(f"📄 Using {len(icd_docs)} documents directly (no chunking)")
 
         # Store embeddings of full descriptions
-        vector_store = store_embeddings(icd_docs, "icd_11", args.persist_dir)
+        vector_store = store_embeddings(
+            icd_docs, "icd_11", persist_dir, model_name=args.model
+        )
 
     print(f"\n✅ ICD-11 embeddings stored successfully!")
     print(f"🔍 Vector store collection: 'collection_icd_11'")
-    print(f"📁 Persist directory: {args.persist_dir}")
+    print(f"📁 Persist directory: {persist_dir}")
+    print(f"🤖 Model used: {args.model}")
 
 
 if __name__ == "__main__":

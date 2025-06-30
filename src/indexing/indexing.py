@@ -1,15 +1,12 @@
-from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-import glob
+from langchain_core.embeddings import Embeddings  # Add this import
 import os
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
-from langchain_core.documents import Document
 import json
-import warnings
 import torch
 import subprocess
 
@@ -27,7 +24,11 @@ def split_documents(docs, chunk_size=500, chunk_overlap=200):
 
 
 def store_embeddings(
-    docs, collection_name, persist_dir="data/vector_db/chroma_langchain_db"
+    docs,
+    collection_name,
+    persist_dir="data/vector_db/chroma_langchain_db",
+    model_name="sentence-transformers/all-mpnet-base-v2",
+    device="auto",
 ):
     """
     Store document embeddings in a local ChromaDB vector database.
@@ -36,13 +37,28 @@ def store_embeddings(
         docs: List of document chunks to be embedded and stored
         collection_name: Name of the collection
         persist_dir: Directory where ChromaDB will persist the database
+        model_name: HuggingFace embedding model name
+        device: Device to use ('cuda', 'cpu', or 'auto')
 
     Returns:
         vector_store: The ChromaDB vector store instance
     """
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-mpnet-base-v2"
-    )
+    # Auto-detect device if not specified
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    print(f"🤖 Using embedding model: {model_name}")
+    print(f"💻 Using device: {device}")
+
+    # Handle Jina embeddings differently
+    if model_name == "jinaai/jina-embeddings-v3":
+        print("🎯 Detected Jina embeddings model - using custom implementation")
+        embeddings = JinaEmbeddingFunction(model_name=model_name, device=device)
+    else:
+        # Standard HuggingFace embeddings
+        embeddings = HuggingFaceEmbeddings(
+            model_name=model_name, model_kwargs={"device": device}
+        )
 
     collection_name = f"collection_{collection_name}"
     os.makedirs(persist_dir, exist_ok=True)
@@ -61,6 +77,47 @@ def store_embeddings(
     )
 
     return vector_store
+
+
+class JinaEmbeddingFunction(Embeddings):
+    """Custom embedding function for Jina embeddings model."""
+
+    def __init__(self, model_name="jinaai/jina-embeddings-v3", device="auto"):
+        from sentence_transformers import SentenceTransformer
+
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        self.model = SentenceTransformer(
+            model_name, trust_remote_code=True, device=device
+        )
+        self.task = "retrieval.passage"  # For documents/passages
+
+    def embed_documents(self, texts):
+        """Embed a list of documents."""
+        embeddings = self.model.encode(
+            texts,
+            task=self.task,
+            prompt_name=self.task,
+        )
+        return embeddings.tolist()
+
+    def embed_query(self, text):
+        """Embed a single query."""
+        query_task = "retrieval.query"  # Different task for queries
+        embedding = self.model.encode(
+            [text],
+            task=query_task,
+            prompt_name=query_task,
+        )
+        return embedding[0].tolist()
+
+    def __call__(self, texts):
+        """Make the class callable for ChromaDB compatibility."""
+        if isinstance(texts, str):
+            return self.embed_query(texts)
+        else:
+            return self.embed_documents(texts)
 
 
 def plot_description_lengths(
@@ -145,18 +202,6 @@ def plot_description_lengths(
         "std": np.std(lengths),
     }
 
-    chunking_recommended = False
-
-    # Decision on chunking
-    if stats["max"] > 800:
-        print(f"\n📝 Chunking recommended.")
-        chunking_recommended = True
-    else:
-        print(
-            f"\n✅ No chunking needed - descriptions are short enough for direct embedding"
-        )
-    return chunking_recommended
-
 
 def convert_icd_to_documents(icd_descriptions):
     """
@@ -170,82 +215,24 @@ def convert_icd_to_documents(icd_descriptions):
     """
     from langchain_core.documents import Document
 
-    icd_docs = [
-        Document(
+    icd_docs = []
+    for item in icd_descriptions:
+        code = item.get("code", "")
+        code_prefix = (
+            code[0] if code else ""
+        )  # Get first letter, empty string if no code
+
+        doc = Document(
             page_content=item["description"],
             metadata={
-                "code": item["code"],
+                "code": code,
+                "code_prefix": code_prefix,
                 "name": item["name"],
                 "url": item["url"],
                 "type": "icd11_condition",
             },
         )
-        for item in icd_descriptions
-    ]
+        icd_docs.append(doc)
 
     print(f"✅ Converted {len(icd_docs)} ICD descriptions to Document objects")
     return icd_docs
-
-
-# Test usage
-if __name__ == "__main__":
-
-    # Diagnose CUDA setup
-    print("🔍 CUDA Diagnostics:")
-    try:
-        # Check if nvidia-smi works
-        result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
-        if result.returncode == 0:
-            print("✅ nvidia-smi works - GPU hardware detected")
-        else:
-            print("❌ nvidia-smi failed")
-    except:
-        print("❌ nvidia-smi not found")
-
-    # Check PyTorch CUDA
-    print(f"PyTorch CUDA available: {torch.cuda.is_available()}")
-    print(f"PyTorch CUDA device count: {torch.cuda.device_count()}")
-
-    if torch.cuda.is_available():
-        print(f"CUDA device name: {torch.cuda.get_device_name(0)}")
-        device = "cuda"
-    else:
-        print("Using CPU for embeddings")
-        device = "cpu"
-
-    with open(
-        "../../data/ICD-codes/icd11_vectordb_base.json", "r", encoding="utf-8"
-    ) as f:
-        icd_descriptions = json.load(f)
-
-    # Plot description length distribution
-    chunking_recommended = plot_description_lengths(
-        icd_descriptions, "ICD-11 Description Lengths"
-    )
-
-    # Convert to Document objects first
-    icd_docs = convert_icd_to_documents(icd_descriptions)
-
-    # Define persist directory
-    persist_dir = "../../data/vector_db/chroma_langchain_db"
-
-    if chunking_recommended:
-        print(f"\n📝 Chunking recommended - splitting documents > 800 characters...")
-
-        # Split documents with appropriate chunk size
-        chunks = split_documents(icd_docs, chunk_size=600, chunk_overlap=100)
-        print(f"📄 Created {len(chunks)} chunks from {len(icd_docs)} descriptions")
-
-        # Store embeddings of chunks
-        vector_store = store_embeddings(chunks, "icd_11", persist_dir)
-
-    else:
-        print(f"\n✅ No chunking needed - descriptions are ≤ 800 characters")
-        print(f"📄 Using {len(icd_docs)} documents directly (no chunking)")
-
-        # Store embeddings of full descriptions
-        vector_store = store_embeddings(icd_docs, "icd_11", persist_dir)
-
-    print(f"\n✅ ICD-11 embeddings stored successfully!")
-    print(f"🔍 Vector store collection: 'collection_icd_11'")
-    print(f"📁 Persist directory: {persist_dir}")
