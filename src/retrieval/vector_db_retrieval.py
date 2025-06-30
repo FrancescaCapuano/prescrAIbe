@@ -94,8 +94,6 @@ class ContraindicationRetriever:
 
         # Generate embedding and search
         query_embedding = self.embedding_function([query])
-        if hasattr(query_embedding, "tolist"):
-            query_embedding = query_embedding.tolist()
 
         results = self.collection.query(
             query_embeddings=query_embedding,
@@ -104,40 +102,52 @@ class ContraindicationRetriever:
             where={"code_prefix": {"$nin": ["M", "N", "P", "Q", "R", "V", "X"]}},
         )
 
-        if not results or not results.get("ids") or not results["ids"][0]:
+        # Check if results exist and have valid data
+        if (
+            not results
+            or not results.get("ids")
+            or not results["ids"]
+            or not results["ids"][0]
+            or not results.get("documents")
+            or not results["documents"]
+            or not results["documents"][0]
+            or not results.get("distances")
+            or not results["distances"]
+            or not results["distances"][0]
+        ):
             return []
 
         # Format results (ChromaDB returns distance scores - lower = more similar)
-        formatted_results = [
-            {
-                "id": results["ids"][0][i],
-                "document": results["documents"][0][i],
-                "metadata": (
-                    results["metadatas"][0][i]
-                    if results["metadatas"] and results["metadatas"][0]
-                    else {}
-                ),
-                "distance": results["distances"][0][
-                    i
-                ],  # Lower distance = higher similarity
-                "similarity": self._distance_to_similarity(
-                    results["distances"][0][i]
-                ),  # Converted to 0-1 scale
-            }
-            for i in range(len(results["ids"][0]))
-            if isinstance(
-                (
-                    results["metadatas"][0][i]
-                    if results["metadatas"] and results["metadatas"][0]
-                    else {}
-                ),
-                dict,
+        formatted_results = []
+        for i in range(len(results["ids"][0])):
+            # Safely get metadata
+            metadata = {}
+            if (
+                results.get("metadatas")
+                and results["metadatas"]
+                and len(results["metadatas"]) > 0
+                and len(results["metadatas"][0]) > i
+                and isinstance(results["metadatas"][0][i], dict)
+            ):
+                metadata = results["metadatas"][0][i]
+
+            formatted_results.append(
+                {
+                    "id": results["ids"][0][i],
+                    "document": results["documents"][0][i],
+                    "metadata": metadata,
+                    "distance": results["distances"][0][
+                        i
+                    ],  # Lower distance = higher similarity
+                    "similarity": self._distance_to_similarity(
+                        results["distances"][0][i]
+                    ),  # Converted to 0-1 scale
+                }
             )
-        ]
 
         # Apply statistical filtering if requested
         if use_statistical_filter and len(formatted_results) > 1:
-            distances = [r["distance"] for r in formatted_results]
+            distances = np.array([r["distance"] for r in formatted_results])
             median = np.median(distances)
             mad = median_abs_deviation(distances)
             robust_z_scores = (distances - median) / mad
@@ -390,169 +400,3 @@ def filter_contraindications_by_aic(
     )
     print(f"🎯 Filtered AICs: {[aic['aic'] for aic in filtered_aics]}")
     return filtered_aics
-
-
-def show_categories():
-    """Show available categories in the contraindications file."""
-    root_dir = Path(__file__).parent.parent.parent
-    contraindications_path = (
-        root_dir / "data" / "contraindications" / "all_contraindications_verified.json"
-    )
-
-    with open(contraindications_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    category_counts = {}
-    for aic_data in data:
-        for contraindication in aic_data.get("contraindications", []):
-            category = contraindication.get("category", "").lower()
-            if category:
-                category_counts[category] = category_counts.get(category, 0) + 1
-
-    print("\n📋 Available categories:")
-    for i, (category, count) in enumerate(
-        sorted(category_counts.items(), key=lambda x: x[1], reverse=True), 1
-    ):
-        print(f"   {i:2d}. {category:<25} ({count:,} contraindications)")
-
-
-def show_aic_codes():
-    """Show available AIC codes in the contraindications file."""
-    root_dir = Path(__file__).parent.parent.parent
-    contraindications_path = (
-        root_dir / "data" / "contraindications" / "all_contraindications_verified.json"
-    )
-
-    with open(contraindications_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    aic_info = []
-    for aic_data in data:
-        aic_code = aic_data.get("aic", "")
-        contraindications_count = len(aic_data.get("contraindications", []))
-        aic_info.append((aic_code, contraindications_count))
-
-    # Sort by contraindications count (descending)
-    aic_info.sort(key=lambda x: x[1], reverse=True)
-
-    print(f"\n📋 Available AIC codes ({len(aic_info)} total):")
-    for i, (aic_code, count) in enumerate(aic_info, 1):
-        print(f"   {i:3d}. {aic_code:<15} ({count:,} contraindications)")
-
-
-def main():
-    """Main execution."""
-    import argparse
-    import sys
-
-    # Handle special commands
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--show-categories":
-            show_categories()
-            return
-        elif sys.argv[1] == "--show-aic-codes":
-            show_aic_codes()
-            return
-
-    parser = argparse.ArgumentParser(
-        description="Run contraindication similarity search"
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="sentence-transformers/all-mpnet-base-v2",
-        help="Embedding model name",
-    )
-    parser.add_argument("--category", type=str, default=None, help="Filter by category")
-    parser.add_argument(
-        "--aic-codes",
-        type=str,
-        nargs="+",
-        default=None,
-        help="Filter by AIC codes (space-separated list, e.g., --aic-codes A10BA02 A10BF01)",
-    )
-    args = parser.parse_args()
-
-    root_dir = Path(__file__).parent.parent.parent
-    model_name_clean = args.model.replace("/", "_").replace("-", "_")
-
-    # Paths
-    vectordb_path = (
-        root_dir
-        / "data"
-        / "vector_dbs"
-        / f"vector_db_{model_name_clean}"
-        / "chroma_langchain_db"
-    )
-    contraindications_path = (
-        root_dir / "data" / "contraindications" / "all_contraindications_verified.json"
-    )
-    results_path = root_dir / "data" / "interaction_results"
-
-    print(f"🤖 Using model: {args.model}")
-    print(f"📁 Vector DB path: {vectordb_path}")
-
-    if args.category:
-        print(f"🏷️ Filtering by category: {args.category}")
-    if args.aic_codes:
-        print(f"🏷️ Filtering by AIC codes: {args.aic_codes}")
-
-    if not vectordb_path.exists():
-        print(
-            f"❌ Vector database not found. Run: python scripts/run_indexing.py --model {args.model}"
-        )
-        return
-
-    # Load and filter data
-    print("📂 Loading contraindications file...")
-    with open(contraindications_path, "r", encoding="utf-8") as f:
-        contraindications_data = json.load(f)
-
-    # Apply AIC filtering first (if specified)
-    if args.aic_codes:
-        print(f"🎯 Filtering by {len(args.aic_codes)} AIC codes")
-        contraindications_data = filter_contraindications_by_aic(
-            contraindications_data, args.aic_codes
-        )
-
-    # Apply category filtering (if specified)
-    if args.category:
-        print(f"🏷️ Filtering by category: {args.category}")
-        contraindications_data = filter_contraindications_by_category(
-            contraindications_data, args.category
-        )
-
-    if not contraindications_data:
-        print(
-            "❌ No data remaining after filtering. Please check your filter criteria."
-        )
-        return
-
-    # Process
-    retriever = ContraindicationRetriever(
-        str(vectordb_path), str(results_path), model_name=args.model
-    )
-
-    print("\n🎯 Starting similarity search processing...")
-    results = retriever.process_all_contraindications_file(
-        contraindications_data,
-        max_results=50,
-        use_statistical_filter=True,
-        devs=1.25,
-        save_checkpoint_every=3,
-    )
-
-    # Save and report
-    output_file = retriever.save_all_results(results)
-    total_contraindications = sum(
-        len(aic_result["similarity_searches"]) for aic_result in results["aic_results"]
-    )
-
-    print(f"\n🎉 COMPLETED! Results: {output_file}")
-    print(
-        f"📊 Processed {len(results['aic_results'])} AICs, {total_contraindications:,} contraindications"
-    )
-
-
-if __name__ == "__main__":
-    main()
