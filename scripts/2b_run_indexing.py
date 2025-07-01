@@ -41,9 +41,8 @@ def main():
     CHUNK_SIZE = 600
     CHUNK_OVERLAP = 100
 
-    # Generate persist directory name based on model
-    model_name_clean = args.model.replace("/", "_").replace("-", "_")
-    persist_dir = f"data/vector_dbs/vector_db_{model_name_clean}/chroma_langchain_db"
+    # Use single vector database directory
+    persist_dir = "data/vector_dbs/vector_db/chroma_langchain_db"
 
     print(f"\n📊 Configuration:")
     print(f"   Data file: {DATA_FILE} (fixed)")
