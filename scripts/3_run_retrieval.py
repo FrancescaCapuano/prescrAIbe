@@ -54,16 +54,11 @@ def main():
     DEVS = 1.25
     CHECKPOINT_FREQUENCY = 3
 
-    # Generate paths based on model
+    # Generate paths
     root_dir = Path(__file__).parent.parent
-    model_name_clean = args.model.replace("/", "_").replace("-", "_")
 
     vectordb_path = (
-        root_dir
-        / "data"
-        / "vector_dbs"
-        / f"vector_db_{model_name_clean}"
-        / "chroma_langchain_db"
+        root_dir / "data" / "vector_dbs" / "vector_db" / "chroma_langchain_db"
     )
     contraindications_path = (
         root_dir / "data" / "contraindications" / "all_contraindications_verified.json"
