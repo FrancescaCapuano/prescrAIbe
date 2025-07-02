@@ -34,17 +34,17 @@ def main():
     print(f"🎯 Running in {mode_str} mode")
     print("💡 Use --full for full processing, --count N to set test count")
 
-    # # Step 1: Extract contraindications
-    # print("\n🚀 Step 1: Extracting contraindications...")
-    # extract_all_contraindications(
-    #     system_prompt_path="data/prompts/system_prompt.txt",
-    #     user_prompt_path="data/prompts/user_prompt_template.txt",
-    #     leaflet_sections_dir="data/leaflets/sections",
-    #     output_file="data/contraindications/all_contraindications.json",
-    #     progress_file="data/contraindications/extraction_progress.json",
-    #     test_mode=test_mode,
-    #     test_count=test_count,
-    # )
+    # Step 1: Extract contraindications
+    print("\n🚀 Step 1: Extracting contraindications...")
+    extract_all_contraindications(
+        system_prompt_path="data/prompts/system_prompt.txt",
+        user_prompt_path="data/prompts/user_prompt_template.txt",
+        leaflet_sections_dir="data/leaflets/sections",
+        output_file="data/contraindications/all_contraindications.json",
+        progress_file="data/contraindications/extraction_progress.json",
+        test_mode=test_mode,
+        test_count=test_count,
+    )
 
     # Step 2: Verify contraindications
     print("\n🔍 Step 2: Verifying contraindications...")

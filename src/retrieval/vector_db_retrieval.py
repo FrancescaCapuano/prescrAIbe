@@ -328,10 +328,7 @@ class ContraindicationRetriever:
 
     def save_all_results(self, results: Dict[str, Any]) -> str:
         """Save results for all AICs to JSON file."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_name_clean = self.model_name.replace("/", "_").replace("-", "_")
-        filename = f"interaction_results_{model_name_clean}_{timestamp}.json"
-        filepath = self.results_path / filename
+        filepath = self.results_path / "interaction_results.json"
 
         print("💾 Saving final results to file...")
         with open(filepath, "w", encoding="utf-8") as f:

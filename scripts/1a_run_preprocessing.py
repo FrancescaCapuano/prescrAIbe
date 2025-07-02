@@ -47,8 +47,8 @@ def main():
     drugs = parse_drugs_file(args.drugs_file)
 
     # Download leaflets for the drugs
-    # print(f"Downloading leaflets for: {drugs}")
-    # download_leaflets_for_drugs(list(drugs), base_dir=args.raw_dir)
+    print(f"Downloading leaflets for: {drugs}")
+    download_leaflets_for_drugs(list(drugs), base_dir=args.raw_dir)
 
     # Map drugs to leaflets
     map_drugs_to_leaflet(
@@ -56,14 +56,13 @@ def main():
         args.raw_dir,
         args.processed_dir,
     )
-    """
+
     # Extract a specific section from the leaflets
     extract_section_from_leaflets(
         args.processed_dir,
         "data/leaflets/sections",
         section_num=2,  # Example section number, adjust as needed
     )
-    """
 
 
 if __name__ == "__main__":
