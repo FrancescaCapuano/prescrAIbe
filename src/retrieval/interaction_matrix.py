@@ -4,6 +4,53 @@ from typing import Dict, Tuple, Any, List
 from datetime import datetime
 
 
+def process_retrieval_results_to_matrix(
+    results_file: str, output_dir: str = "data/interaction_matrix"
+) -> str:
+    """
+    Process retrieval results file to interaction matrix.
+
+    Args:
+        results_file: Path to the retrieval results JSON file
+        output_dir: Directory to save the interaction matrix
+
+    Returns:
+        Path to the saved interaction matrix file
+    """
+    print(f"📂 Loading retrieval results from: {results_file}")
+
+    # Load retrieval results
+    with open(results_file, "r", encoding="utf-8") as f:
+        results = json.load(f)
+
+    print(f"✅ Loaded retrieval results")
+
+    # Initialize matrix builder
+    builder = InteractionMatrixBuilder(output_dir)
+
+    # Build interaction matrix
+    print(f"🔗 Building interaction matrix...")
+    matrix = builder.build_interaction_matrix(results)
+
+    # Save matrix to file
+    print(f"💾 Saving interaction matrix...")
+    matrix_file = builder.save_interaction_matrix(matrix)
+
+    # Print statistics
+    stats = builder.get_matrix_statistics(matrix)
+    print(f"\n📊 MATRIX STATISTICS:")
+    print(f"   🔢 {stats['unique_aics']} AICs × {stats['unique_icds']} ICDs")
+    print(
+        f"   🔗 {stats['actual_unique_combinations']:,}/{stats['total_possible_combinations']:,} combinations ({stats['coverage_percentage']:.1f}%)"
+    )
+    print(
+        f"   📋 {stats['total_contraindications']:,} total interactions (avg {stats['avg_contraindications_per_pair']:.1f} per pair)"
+    )
+    print(f"   📈 Matrix density: {stats['matrix_density']:.4f}")
+
+    return matrix_file
+
+
 class InteractionMatrixBuilder:
     """Build interaction matrix from ContraindicationRetriever results."""
 
@@ -126,7 +173,9 @@ class InteractionMatrixBuilder:
             pass
         return f"Unknown AIC {aic}"
 
-    def load_matrix(self, matrix_file: str = None) -> Dict[str, List[Dict]]:
+    def load_matrix(
+        self, matrix_file: str = "data/interaction_matrix/interaction_matrix.json"
+    ) -> Dict[str, List[Dict]]:
         """
         Load interaction matrix from JSON file for efficient querying.
 
@@ -148,7 +197,10 @@ class InteractionMatrixBuilder:
         return self._loaded_matrix
 
     def get_interactions(
-        self, aic: str, icd: str, matrix_file: str = None
+        self,
+        aic: str,
+        icd: str,
+        matrix_file: str = "data/interaction_matrix/interaction_matrix.json",
     ) -> List[Dict[str, str]]:
         """
         Get interactions for specific AIC-ICD pair - O(1) lookup.
@@ -172,7 +224,12 @@ class InteractionMatrixBuilder:
             )
         return interactions
 
-    def has_interaction(self, aic: str, icd: str, matrix_file: str = None) -> bool:
+    def has_interaction(
+        self,
+        aic: str,
+        icd: str,
+        matrix_file: str = "data/interaction_matrix/interaction_matrix.json",
+    ) -> bool:
         """
         Check if AIC-ICD pair has any interactions - O(1) lookup.
 
@@ -187,6 +244,22 @@ class InteractionMatrixBuilder:
         matrix = self.load_matrix(matrix_file)
         key = f"{aic}|{icd}"
         return key in matrix and len(matrix[key]) > 0
+
+    @classmethod
+    def process_retrieval_results_to_matrix(
+        cls, results_file: str, output_dir: str = "data/interaction_matrix"
+    ) -> str:
+        """
+        Class method to process retrieval results to interaction matrix.
+
+        Args:
+            results_file: Path to the retrieval results JSON file
+            output_dir: Directory to save the interaction matrix
+
+        Returns:
+            Path to the saved interaction matrix file
+        """
+        return process_retrieval_results_to_matrix(results_file, output_dir)
 
 
 if __name__ == "__main__":
