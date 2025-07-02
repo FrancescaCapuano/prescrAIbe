@@ -96,6 +96,9 @@ class InteractionMatrixBuilder:
         raw_pairs = 0
         duplicates_avoided = 0
 
+        # Get AIC name
+        aic_name = self._get_aic_name(aic)
+
         for search_entry in similarity_searches:
             contraindication_id = search_entry.get("contraindication_id", "")
             original_warning = search_entry.get("original_warning", {})
@@ -124,6 +127,7 @@ class InteractionMatrixBuilder:
                     # Create interaction entry
                     interaction_entry = {
                         "aic_url": aic_url,
+                        "aic_name": aic_name,  # Add this
                         "warning": warning_ita,
                         "icd_name": icd_name,
                         "icd_url": icd_url,
@@ -244,6 +248,24 @@ class InteractionMatrixBuilder:
         }
 
         return stats
+
+    def _get_aic_name(self, aic: str) -> str:
+        """Get AIC name from code using your mapping data."""
+        # Option A: Load from your Excel file
+        try:
+            import pandas as pd
+
+            df = pd.read_excel("data/leaflets/estrazione_farmaci.xlsx")
+
+            # Find matching AIC code
+            match = df[df["code"].astype(str).str.zfill(9) == str(aic).zfill(9)]
+
+            if not match.empty:
+                return match.iloc[0]["name"]
+        except:
+            pass
+
+        return f"Unknown AIC {aic}"
 
 
 def process_retrieval_results_to_matrix(
