@@ -63,76 +63,76 @@ def main():
     )
     results_path = root_dir / "data" / "interaction_results"
 
-    # print(f"\n📊 Configuration:")
-    # print(f"   Model: {args.model}")
-    # print(f"   Vector DB path: {vectordb_path}")
-    # print(f"   Max results per query: {MAX_RESULTS} (fixed)")
-    # print(
-    #     f"   Statistical filtering: {'enabled' if USE_STATISTICAL_FILTER else 'disabled'} (fixed)"
-    # )
-    # print(f"   Checkpoint frequency: every {CHECKPOINT_FREQUENCY} AICs (fixed)")
+    print(f"\n📊 Configuration:")
+    print(f"   Model: {args.model}")
+    print(f"   Vector DB path: {vectordb_path}")
+    print(f"   Max results per query: {MAX_RESULTS} (fixed)")
+    print(
+        f"   Statistical filtering: {'enabled' if USE_STATISTICAL_FILTER else 'disabled'} (fixed)"
+    )
+    print(f"   Checkpoint frequency: every {CHECKPOINT_FREQUENCY} AICs (fixed)")
 
-    # if args.category:
-    #     print(f"   Category filter: {args.category}")
-    # if args.aic_codes:
-    #     print(f"   AIC codes filter: {args.aic_codes}")
+    if args.category:
+        print(f"   Category filter: {args.category}")
+    if args.aic_codes:
+        print(f"   AIC codes filter: {args.aic_codes}")
 
-    # # Validation
-    # if not vectordb_path.exists():
-    #     print(f"❌ Vector database not found.")
-    #     return
+    # Validation
+    if not vectordb_path.exists():
+        print(f"❌ Vector database not found.")
+        return
 
-    # # Load and filter data
-    # print(f"\n📂 Loading contraindications...")
-    # with open(contraindications_path, "r", encoding="utf-8") as f:
-    #     contraindications_data = json.load(f)
+    # Load and filter data
+    print(f"\n📂 Loading contraindications...")
+    with open(contraindications_path, "r", encoding="utf-8") as f:
+        contraindications_data = json.load(f)
 
-    # print(f"✅ Loaded {len(contraindications_data)} AICs")
+    print(f"✅ Loaded {len(contraindications_data)} AICs")
 
-    # # Apply filtering
-    # if args.aic_codes:
-    #     contraindications_data = filter_contraindications_by_aic(
-    #         contraindications_data, args.aic_codes
-    #     )
+    # Apply filtering
+    if args.aic_codes:
+        contraindications_data = filter_contraindications_by_aic(
+            contraindications_data, args.aic_codes
+        )
 
-    # if args.category:
-    #     contraindications_data = filter_contraindications_by_category(
-    #         contraindications_data, args.category
-    #     )
+    if args.category:
+        contraindications_data = filter_contraindications_by_category(
+            contraindications_data, args.category
+        )
 
-    # if not contraindications_data:
-    #     print("❌ No data remaining after filtering.")
-    #     return
+    if not contraindications_data:
+        print("❌ No data remaining after filtering.")
+        return
 
-    # # Process
-    # retriever = ContraindicationRetriever(
-    #     str(vectordb_path), str(results_path), model_name=args.model
-    # )
+    # Process
+    retriever = ContraindicationRetriever(
+        str(vectordb_path), str(results_path), model_name=args.model
+    )
 
-    # print(f"\n🎯 Processing {len(contraindications_data)} AICs...")
-    # results = retriever.process_all_contraindications_file(
-    #     contraindications_data,
-    #     max_results=MAX_RESULTS,
-    #     use_statistical_filter=USE_STATISTICAL_FILTER,
-    #     devs=DEVS,
-    #     save_checkpoint_every=CHECKPOINT_FREQUENCY,
-    # )
+    print(f"\n🎯 Processing {len(contraindications_data)} AICs...")
+    results = retriever.process_all_contraindications_file(
+        contraindications_data,
+        max_results=MAX_RESULTS,
+        use_statistical_filter=USE_STATISTICAL_FILTER,
+        devs=DEVS,
+        save_checkpoint_every=CHECKPOINT_FREQUENCY,
+    )
 
-    # # Save results
-    # output_file = retriever.save_all_results(results)
-    # total_contraindications = sum(
-    #     len(aic_result["similarity_searches"]) for aic_result in results["aic_results"]
-    # )
+    # Save results
+    output_file = retriever.save_all_results(results)
+    total_contraindications = sum(
+        len(aic_result["similarity_searches"]) for aic_result in results["aic_results"]
+    )
 
-    # print(f"\n✅ Completed! Results: {output_file}")
-    # print(
-    #     f"📊 Processed {len(results['aic_results'])} AICs, {total_contraindications:,} contraindications"
-    # )
+    print(f"\n✅ Completed! Results: {output_file}")
+    print(
+        f"📊 Processed {len(results['aic_results'])} AICs, {total_contraindications:,} contraindications"
+    )
 
-    # DELETE: read from file
-    results_file = results_path / "interaction_results.json"
-    with open(results_file, "r", encoding="utf-8") as f:
-        results = json.load(f)
+    # OR: read from file
+    # results_file = results_path / "interaction_results.json"
+    # with open(results_file, "r", encoding="utf-8") as f:
+    #     results = json.load(f)
 
     # Build and save interaction matrix
     print(f"\n🔗 Building interaction matrix from results...")
