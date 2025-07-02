@@ -6,6 +6,10 @@ Usage:
     python scripts/3_run_retrieval.py
     python scripts/3_run_retrieval.py --model jinaai/jina-embeddings-v3
     python scripts/3_run_retrieval.py --aic-codes 045034307 --category condition
+
+    python scripts/3_run_retrieval.py --model jinaai/jina-embeddings-v3 --aic-codes 030705026 044077028 041445014 044856060 023779061 034949026 040409017 042342016 008679021 025373073 036906055 041508019 023892033 035077015 028282376 934521384 934521358 038016109 029354192 023309103 --category condition
+    python scripts/3_run_retrieval.py --model jinaai/jina-embeddings-v2-base-en --aic-codes 030705026 044077028 041445014 044856060 023779061 034949026 040409017 042342016 008679021 025373073 036906055 041508019 023892033 035077015 028282376 934521384 934521358 038016109 029354192 023309103 --category condition
+    python scripts/3_run_retrieval.py --model sentence-transformers/all-mpnet-base-v2 --aic-codes 030705026 044077028 041445014 044856060 023779061 034949026 040409017 042342016 008679021 025373073 036906055 041508019 023892033 035077015 028282376 934521384 934521358 038016109 029354192 023309103 --category condition
 """
 
 import sys
@@ -137,26 +141,26 @@ def main():
     )
 
     # Build and save interaction matrix
-    print(f"\n🔗 Building interaction matrix from results...")
-    matrix_builder = InteractionMatrixBuilder()
-    interaction_matrix = matrix_builder.build_interaction_matrix(results)
-    matrix_file = matrix_builder.save_interaction_matrix(interaction_matrix)
+    # print(f"\n🔗 Building interaction matrix from results...")
+    # matrix_builder = InteractionMatrixBuilder()
+    # interaction_matrix = matrix_builder.build_interaction_matrix(results)
+    # matrix_file = matrix_builder.save_interaction_matrix(interaction_matrix)
 
-    # Print matrix statistics
-    stats = matrix_builder.get_matrix_statistics(interaction_matrix)
-    print(f"\n📊 INTERACTION MATRIX STATISTICS:")
-    print(f"  Unique AIC codes: {stats['unique_aics']}")
-    print(f"  Unique ICD codes: {stats['unique_icds']}")
-    print(f"  🔢 Total possible combinations: {stats['total_possible_combinations']:,}")
-    print(f"  ✅ Actual unique combinations: {stats['actual_unique_combinations']:,}")
-    print(f"  📋 Total interaction entries: {stats['total_contraindications']:,}")
-    print(
-        f"  📈 Avg entries per combination: {stats['avg_contraindications_per_pair']:.2f}"
-    )
-    print(f"  📈 Coverage: {stats['coverage_percentage']:.2f}%")
-    print(f"  📊 Matrix density: {stats['matrix_density']:.6f}")
+    # # Print matrix statistics
+    # stats = matrix_builder.get_matrix_statistics(interaction_matrix)
+    # print(f"\n📊 INTERACTION MATRIX STATISTICS:")
+    # print(f"  Unique AIC codes: {stats['unique_aics']}")
+    # print(f"  Unique ICD codes: {stats['unique_icds']}")
+    # print(f"  🔢 Total possible combinations: {stats['total_possible_combinations']:,}")
+    # print(f"  ✅ Actual unique combinations: {stats['actual_unique_combinations']:,}")
+    # print(f"  📋 Total interaction entries: {stats['total_contraindications']:,}")
+    # print(
+    #     f"  📈 Avg entries per combination: {stats['avg_contraindications_per_pair']:.2f}"
+    # )
+    # print(f"  📈 Coverage: {stats['coverage_percentage']:.2f}%")
+    # print(f"  📊 Matrix density: {stats['matrix_density']:.6f}")
 
-    print(f"\n💾 Interaction matrix saved: {matrix_file}")
+    # print(f"\n💾 Interaction matrix saved: {matrix_file}")
 
 
 if __name__ == "__main__":
