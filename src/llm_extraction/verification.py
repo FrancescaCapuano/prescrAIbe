@@ -1,5 +1,6 @@
 import json
 import os
+from pydoc import text
 import re
 from datetime import datetime
 from pathlib import Path
@@ -14,12 +15,24 @@ def context_is_in_leaflet(context, leaflet, debug=False):
     context_lower = context.lower().strip()
     leaflet_lower = leaflet.lower()
 
+    # Remove bullet point characters if present at the beginning of the context
+    if context_lower.startswith("- "):
+        context_lower = context_lower[2:].strip()
+
+    # Remove "se ha" from beginning of context
+    if context_lower.startswith("se ha"):
+        context_lower = context_lower[5:].strip()
+
     # Remove quotes and normalize
     context_clean = context_lower.replace("'", "").replace('"', "")
 
     # CRITICAL: Normalize whitespace and newlines PROPERLY
     context_normalized = re.sub(r"\s+", " ", context_clean).strip()
     leaflet_normalized = re.sub(r"\s+", " ", leaflet_lower).strip()
+    leaflet_normalized = leaflet_normalized.replace("\n", " ").replace("\r", " ")
+    leaflet_normalized = re.sub(
+        r"(\r\n|[\n\r\u2028\u2029\u0085\x0b\x0c\x1c-\x1f])", " ", leaflet_normalized
+    )
 
     # IMPROVED: Remove problematic Unicode characters more aggressively
     # Remove the specific problematic character \uf0fc and similar private use area chars
@@ -155,11 +168,7 @@ def verify_contraindications(
                         {
                             "aic": aic,
                             "contraindication_id": contraindication["id"],
-                            "context": (
-                                contraindication["context"][:100] + "..."
-                                if len(contraindication["context"]) > 100
-                                else contraindication["context"]
-                            ),
+                            "context": (contraindication["context"]),
                             "reason": "Leaflet file not found",
                         }
                     )
@@ -203,11 +212,7 @@ def verify_contraindications(
                         {
                             "aic": aic,
                             "contraindication_id": contraindication["id"],
-                            "context": (
-                                contraindication["context"][:100] + "..."
-                                if len(contraindication["context"]) > 100
-                                else contraindication["context"]
-                            ),
+                            "context": (contraindication["context"]),
                             "reason": "Context not found in leaflet",
                         }
                     )
