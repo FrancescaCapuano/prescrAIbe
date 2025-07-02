@@ -17,13 +17,20 @@ def load_json(file_path):
 @st.cache_resource
 def load_all_data():
     interaction_matrix = load_json("data/interaction_matrix/interaction_matrix.json")
-    icd11_database_raw = load_json("data/ICD-codes/icd11_database.json")
-    if isinstance(icd11_database_raw, list):
-        icd11_database = {
-            item["code"]: item for item in icd11_database_raw if "code" in item
-        }
-    else:
-        icd11_database = icd11_database_raw
+    # Load the new ICD11 vector DB
+    icd11_vectordb = load_json("data/ICD-codes/icd11_vectordb_base_compressed.json")
+    # Build icd11_database from vectordb
+    icd11_database = {}
+    for entry in icd11_vectordb:
+        url = entry.get("url", "")
+        name = entry.get("name", "")  # Use the 'name' field for the title
+        if "#" in url:
+            code = url.split("#")[-1].split("/")[0]
+            icd11_database[code] = {
+                "code": code,
+                "url": url,
+                "title": name,  # Use the name as the title
+            }
 
     aic_codes = set()
     aic_icd_mapping = {}
@@ -59,6 +66,7 @@ interaction_matrix, icd11_database, aic_name_map, aic_codes, aic_icd_mapping = (
 def get_icd_display_name(icd_code, icd11_database):
     """Get display name for ICD code"""
     if icd_code in icd11_database:
+        # Use code as title, since no title in vectordb
         title = icd11_database[icd_code].get("title", "N/A")
         return f"{icd_code} - {title}"
     return f"{icd_code} - (Title not found)"
@@ -83,36 +91,66 @@ Francesca Capuano & Viktoria Leuschner
 """
 )
 
+
+# Load patient-ICD mapping (now includes ICD-11 name)
+@st.cache_data
+def load_patient_icd_mapping(csv_path):
+    df = pd.read_csv(csv_path, sep=";")
+    df = df.dropna(subset=["patient", "ICD 11 code"])
+    # Build mapping: patient -> list of (ICD 11 code, ICD 11 name)
+    patient_icd_map = (
+        df.groupby("patient")[["ICD 11 code", "ICD 11 text"]]
+        .apply(lambda x: sorted(set(tuple(row) for row in x.values)))
+        .to_dict()
+    )
+    return patient_icd_map, sorted(patient_icd_map.keys())
+
+
+patient_icd_map, patient_list = load_patient_icd_mapping(
+    "data/patients/snomed_icd_mapping.csv"
+)
+
 # Main UI
 st.title("💊 AI for Safer Prescriptions")
 
-# First dropdown: ICD codes (all available ICD codes)
-icd_options = [
-    get_icd_display_name(code, icd11_database) for code in sorted(icd11_database.keys())
-]
-selected_icd_displays = st.multiselect(
-    "Select ICD11 Codes", options=icd_options, key="icd_selector"
+# Patient selector in the main area
+selected_patient = st.selectbox(
+    "Select Patient", [""] + patient_list, key="main_patient_selector"
 )
 
-# Extract ICD codes from display names
-selected_icds = [display.split(" - ")[0] for display in selected_icd_displays]
+# Show ICD-11 codes and names for the selected patient (from CSV)
+if selected_patient:
+    patient_icd_tuples = patient_icd_map.get(selected_patient, [])
+    # Filter out ICD codes containing "/"
+    filtered_icd_tuples = [
+        (code, name) for code, name in patient_icd_tuples if "/" not in str(code)
+    ]
+    if filtered_icd_tuples:
+        icd_display_list = [
+            f"- **{code}**: {name}" for code, name in filtered_icd_tuples
+        ]
+        st.markdown(
+            "**ICD-11 codes for this patient:**\n\n" + "\n".join(icd_display_list)
+        )
+        patient_icd_codes = [code for code, name in filtered_icd_tuples]
+    else:
+        st.warning("No valid ICD-11 codes found for this patient.")
+        patient_icd_codes = []
+else:
+    patient_icd_codes = []
 
-# Second dropdown: AIC codes with names
+# AIC code selector
 aic_options = [get_aic_display_name(code, aic_name_map) for code in aic_codes]
 selected_aic_display = st.selectbox(
     "Select AIC Code", options=[""] + aic_options, index=0, key="aic_selector"
 )
 selected_aic = selected_aic_display.split(" - ")[0] if selected_aic_display else ""
 
-if selected_aic and selected_icds:
-
-    # Create a results table
+# Only check if both patient and AIC are selected
+if selected_patient and selected_aic and patient_icd_codes:
     results = []
-
-    for icd in selected_icds:
-        # Check if this AIC-ICD combination exists in our mapping
+    for icd in patient_icd_codes:
         warnings_data = aic_icd_mapping.get(selected_aic, {}).get(icd, [])
-
         if warnings_data:
             for warning_item in warnings_data:
                 results.append(
@@ -120,7 +158,10 @@ if selected_aic and selected_icds:
                         "AIC Code": selected_aic,
                         "AIC Name": aic_name_map.get(selected_aic, "Name not found"),
                         "ICD Code": icd,
-                        "ICD Name": icd11_database.get(icd, {}).get("title", "N/A"),
+                        "ICD Name": next(
+                            (name for code, name in patient_icd_tuples if code == icd),
+                            "N/A",
+                        ),
                         "Warning (Italian)": warning_item.get("warning", "N/A"),
                         "AIC URL": warning_item.get("aic_url", "N/A"),
                     }
@@ -131,15 +172,15 @@ if selected_aic and selected_icds:
                     "AIC Code": selected_aic,
                     "AIC Name": aic_name_map.get(selected_aic, "Name not found"),
                     "ICD Code": icd,
-                    "ICD Name": icd11_database.get(icd, {}).get("title", "N/A"),
+                    "ICD Name": next(
+                        (name for code, name in patient_icd_tuples if code == icd),
+                        "N/A",
+                    ),
                     "Warning (Italian)": "No warning",
                     "AIC URL": "N/A",
                 }
             )
-
     if results:
-        # Remove the table summary of warnings (no st.dataframe)
-        # Only display warnings in a more readable format
         st.subheader("Warnings")
         warning_found = False
         for result in results:
@@ -154,16 +195,14 @@ if selected_aic and selected_icds:
                 """
                 )
                 warning_found = True
-
         if not warning_found:
             st.success("✅ No warnings found for the selected combination.")
-
-elif selected_aic and not selected_icds:
-    st.info("Please select at least one ICD11 code to check for interactions.")
-elif not selected_aic and selected_icds:
+elif selected_patient and not selected_aic:
     st.info("Please select an AIC code to check for interactions.")
+elif selected_aic and not selected_patient:
+    st.info("Please select a patient to check for interactions.")
 else:
-    st.info("Please select an AIC code and at least one ICD11 code to view warnings.")
+    st.info("Please select a patient and an AIC code to view warnings.")
 
 # Debug information (expandable)
 with st.expander("Debug Information"):
