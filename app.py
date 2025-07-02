@@ -2,23 +2,30 @@ import streamlit as st
 import json
 import pandas as pd
 
+# Import the InteractionMatrixBuilder class
+from src.retrieval.interaction_matrix import InteractionMatrixBuilder
+
 st.set_page_config(
     page_title="AI for Safer Prescriptions",
     page_icon="💊",  # This emoji will appear in the browser tab
 )
 
 
-# Load data
-def load_json(file_path):
-    with open(file_path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
+# Load data using InteractionMatrixBuilder
 @st.cache_resource
 def load_all_data():
-    interaction_matrix = load_json("data/interaction_matrix/interaction_matrix.json")
+    # Initialize the builder
+    matrix_builder = InteractionMatrixBuilder()
+    # Load the interaction matrix from file
+    interaction_matrix = matrix_builder.load_matrix(
+        "data/interaction_matrix/interaction_matrix.json"
+    )
+
     # Load the new ICD11 vector DB
-    icd11_vectordb = load_json("data/ICD-codes/icd11_vectordb_base_compressed.json")
+    with open(
+        "data/ICD-codes/icd11_vectordb_base_compressed.json", "r", encoding="utf-8"
+    ) as f:
+        icd11_vectordb = json.load(f)
     # Build icd11_database from vectordb
     icd11_database = {}
     for entry in icd11_vectordb:
@@ -45,8 +52,9 @@ def load_all_data():
             aic_icd_mapping[aic_code][icd_code] = warnings_list
             # Extract AIC name from the first warning (assuming all warnings for this combo have the same AIC name)
             if warnings_list and aic_code not in aic_name_map:
+                # Try to get AIC name from the matrix entry, fallback to code
                 aic_name_map[aic_code] = warnings_list[0].get(
-                    "AIC-code", "Name not found"
+                    "aic_name", warnings_list[0].get("AIC-code", "Name not found")
                 )
     return (
         interaction_matrix,
