@@ -111,7 +111,7 @@ def main():
                 save_json(
                     resources,
                     f"{field}.json",
-                    f"../../data/patients/{full_name.strip()}",
+                    f"data/patients/{full_name.strip()}",
                 )
 
         except requests.HTTPError as e:
