@@ -87,7 +87,7 @@ def print_observations(obs_bundle):
 
 def main():
 
-    patients_bundle = get_patients(count=5)
+    patients_bundle = get_patients(count=20)
     print_patients(patients_bundle)
 
     for entry in patients_bundle.get("entry", []):
