@@ -1,6 +1,8 @@
 import streamlit as st
 import json
 import pandas as pd
+import os
+from datetime import datetime
 
 # Import the InteractionMatrixBuilder class
 from src.retrieval.interaction_matrix import InteractionMatrixBuilder
@@ -62,13 +64,40 @@ def load_all_data():
         aic_name_map,
         sorted(list(aic_codes)),
         aic_icd_mapping,
+        icd11_vectordb,
     )
 
 
 # Usage:
-interaction_matrix, icd11_database, aic_name_map, aic_codes, aic_icd_mapping = (
-    load_all_data()
-)
+(
+    interaction_matrix,
+    icd11_database,
+    aic_name_map,
+    aic_codes,
+    aic_icd_mapping,
+    icd11_vectordb,
+) = load_all_data()
+
+
+# Add this function after the load_all_data() function
+def save_feedback(feedback_data):
+    """Save feedback to JSON file"""
+    feedback_file = "data/feedback/warning_feedback.json"
+    os.makedirs(os.path.dirname(feedback_file), exist_ok=True)
+
+    # Load existing feedback
+    if os.path.exists(feedback_file):
+        with open(feedback_file, "r") as f:
+            existing_feedback = json.load(f)
+    else:
+        existing_feedback = []
+
+    # Add new feedback
+    existing_feedback.append(feedback_data)
+
+    # Save updated feedback
+    with open(feedback_file, "w") as f:
+        json.dump(existing_feedback, f, indent=2)
 
 
 def get_icd_display_name(icd_code, icd11_database):
@@ -87,17 +116,27 @@ def get_aic_display_name(aic_code, aic_name_map):
 
 
 # Sidebar with project info and instructions
-st.sidebar.title("ICD11 Interaction Checker")
 st.sidebar.markdown(
     """
-**Project Information**
-- This app checks for warnings based on selected AIC and ICD codes.
-- Data sources: WHO ICD-classification, Leaflets from AIFA.
+**Project Information** \n
+This app checks for contraindications between existing diseases and drugs, that are prescibed by doctors. It was developed at Data Science Retreat.
 
-Contributors:
+**Contributors**: \n
 Francesca Capuano & Viktoria Leuschner
 """
 )
+
+# Add this after the sidebar project info section
+st.sidebar.markdown("---")  # Add a separator
+enable_feedback = st.sidebar.checkbox("Enable Warning Feedback", value=False)
+
+# Add this after the existing enable_feedback checkbox
+st.sidebar.markdown("---")  # Add another separator
+show_active_only = st.sidebar.checkbox("Persisting Conditions", value=False)
+
+# Add this at the beginning of your script after the imports
+if "feedback_given" not in st.session_state:
+    st.session_state.feedback_given = set()
 
 
 # Load patient-ICD mapping (now includes ICD-11 name)
@@ -105,10 +144,14 @@ Francesca Capuano & Viktoria Leuschner
 def load_patient_icd_mapping(csv_path):
     df = pd.read_csv(csv_path, sep=";")
     df = df.dropna(subset=["patient", "ICD 11 code"])
-    # Build mapping: patient -> list of (ICD 11 code, ICD 11 name)
+    # Convert date columns to datetime for sorting
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["abatement date"] = pd.to_datetime(df["abatement date"], errors="coerce")
+    # Build mapping: patient -> list of (ICD 11 code, ICD 11 name, date, abatement date)
     patient_icd_map = (
-        df.groupby("patient")[["ICD 11 code", "ICD 11 text"]]
-        .apply(lambda x: sorted(set(tuple(row) for row in x.values)))
+        df.sort_values("date")
+        .groupby("patient")[["ICD 11 code", "ICD 11 text", "date", "abatement date"]]
+        .apply(lambda x: [(row[0], row[1], row[2], row[3]) for row in x.values])
         .to_dict()
     )
     return patient_icd_map, sorted(patient_icd_map.keys())
@@ -131,18 +174,136 @@ if selected_patient:
     patient_icd_tuples = patient_icd_map.get(selected_patient, [])
     # Filter out ICD codes containing "/"
     filtered_icd_tuples = [
-        (code, name) for code, name in patient_icd_tuples if "/" not in str(code)
+        (code, name, date, abatement)
+        for code, name, date, abatement in patient_icd_tuples
+        if "/" not in str(code) and (not show_active_only or pd.isna(abatement))
     ]
     if filtered_icd_tuples:
-        icd_display_list = [
-            f"- **{code}**: {name}" for code, name in filtered_icd_tuples
-        ]
+        # Create a styled container for the patient card
         st.markdown(
-            "**ICD-11 codes for this patient:**\n\n" + "\n".join(icd_display_list)
+            """
+            <style>
+            .patient-card {
+                border: 1px solid #e1e4e8;
+                border-radius: 10px;
+                padding: 20px;
+                margin: 10px 0;
+                background-color: white;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .condition-entry {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+                padding: 8px;
+                border-left: 3px solid #e1e4e8;  /* Light grey border for all conditions */
+                padding-left: 10px;
+            }
+            .condition-header {
+                background-color: #f6f8fa;
+                padding: 10px;
+                border-radius: 5px 5px 0 0;
+                margin-bottom: 15px;
+                border-bottom: 2px solid #e1e4e8;
+            }
+            .condition-info {
+                flex-grow: 1;
+                margin-right: 20px;
+            }
+            .condition-date {
+                color: #586069;
+                font-size: 0.9em;
+                white-space: nowrap;
+            }
+            .icd-link {
+                text-decoration: none !important;
+                color: #333333 !important;  // Added !important to override browser defaults
+            }
+            .icd-link:hover {
+                text-decoration: underline !important;
+                color: #333333 !important;
+            }
+            .icd-link:visited {
+                color: #333333 !important;  // Added to handle visited links
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
         )
-        patient_icd_codes = [code for code, name in filtered_icd_tuples]
+
+        # Group conditions by date
+        from collections import defaultdict
+
+        date_groups = defaultdict(list)
+        for code, name, date, abatement in filtered_icd_tuples:
+            date_key = (
+                date.strftime("%Y-%m-%d") if pd.notnull(date) else "N/A",
+                abatement.strftime("%Y-%m-%d") if pd.notnull(abatement) else "",
+            )
+            date_groups[date_key].append((code, name))
+
+        # Display conditions
+        for date_str, abatement_str in sorted(date_groups.keys()):
+            if abatement_str:
+                date_display = f"{date_str} - {abatement_str}"
+                condition_class = "condition-inactive"
+            else:
+                date_display = f"{date_str} - Present"
+                condition_class = "condition-active"
+
+            for code, name in date_groups[(date_str, abatement_str)]:
+                matching_entry = next(
+                    (entry for entry in icd11_vectordb if entry.get("code") == code),
+                    None,
+                )
+
+                if matching_entry and "url" in matching_entry:
+                    st.markdown(
+                        f"""
+                        <div class="condition-entry {condition_class}">
+                            <div class="condition-info">
+                                <a href="{matching_entry["url"]}" target="_blank" class="icd-link">
+                                    <strong>{code}</strong>
+                                </a>: {name}
+                            </div>
+                            <div class="condition-date">
+                                {date_display}
+                            </div>
+                        </div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        f"""
+                        <div class="condition-entry {condition_class}">
+                            <div class="condition-info">
+                                <strong>{code}</strong>: {name}
+                            </div>
+                            <div class="condition-date">
+                                {date_display}
+                            </div>
+                        </div>
+                    """,
+                        unsafe_allow_html=True,
+                    )
+
+        st.markdown("</div>", unsafe_allow_html=True)
+        patient_icd_codes = [
+            code
+            for code, name, date, abatement in filtered_icd_tuples
+            if not show_active_only or pd.isna(abatement)
+        ]
     else:
-        st.warning("No valid ICD-11 codes found for this patient.")
+        st.markdown(
+            """
+            <div style='padding: 1rem; border-radius: 0.5rem; background-color: #f0f2f6; color: #31333F'>
+            No persistent conditions found for this patient.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         patient_icd_codes = []
 else:
     patient_icd_codes = []
@@ -150,7 +311,7 @@ else:
 # AIC code selector
 aic_options = [get_aic_display_name(code, aic_name_map) for code in aic_codes]
 selected_aic_display = st.selectbox(
-    "Select AIC Code", options=[""] + aic_options, index=0, key="aic_selector"
+    "Select Drug", options=[""] + aic_options, index=0, key="aic_selector"
 )
 selected_aic = selected_aic_display.split(" - ")[0] if selected_aic_display else ""
 
@@ -167,7 +328,11 @@ if selected_patient and selected_aic and patient_icd_codes:
                         "AIC Name": aic_name_map.get(selected_aic, "Name not found"),
                         "ICD Code": icd,
                         "ICD Name": next(
-                            (name for code, name in patient_icd_tuples if code == icd),
+                            (
+                                name
+                                for code, name, date, abatement in patient_icd_tuples
+                                if code == icd
+                            ),
                             "N/A",
                         ),
                         "Warning (Italian)": warning_item.get("warning", "N/A"),
@@ -181,49 +346,85 @@ if selected_patient and selected_aic and patient_icd_codes:
                     "AIC Name": aic_name_map.get(selected_aic, "Name not found"),
                     "ICD Code": icd,
                     "ICD Name": next(
-                        (name for code, name in patient_icd_tuples if code == icd),
+                        (
+                            name
+                            for code, name, date, abatement in patient_icd_tuples
+                            if code == icd
+                        ),
                         "N/A",
                     ),
-                    "Warning (Italian)": "No warning",
+                    "Warning (Italian)": "Based on the information of the drug leaflet and the ICD description, no contraindication has been found.",
                     "AIC URL": "N/A",
                 }
             )
     if results:
         st.subheader("Warnings")
         warning_found = False
-        for result in results:
-            if result["Warning (Italian)"] != "No warning":
-                st.warning(
-                    f"""
-                **AIC {result['AIC Code']} ({result['AIC Name']}) + ICD {result['ICD Code']} ({result['ICD Name']})**
-                
-                {result['Warning (Italian)']}
-                
-                [View AIC Details]({result['AIC URL']})
-                """
-                )
+        for idx, result in enumerate(results):
+            if (
+                result["Warning (Italian)"]
+                != "Based on the information of the drug leaflet and the ICD description, no contraindication has been found."
+            ):
                 warning_found = True
+
+                # Display warning in a container
+                with st.container():
+                    st.warning(
+                        f"""
+                        **AIC {result['AIC Code']} ({result['AIC Name']}) + ICD {result['ICD Code']} ({result['ICD Name']})**
+                        
+                        {result['Warning (Italian)']}
+                        
+                        [View AIC Details]({result['AIC URL']})
+                        """
+                    )
+
+                    # Only show feedback buttons if feedback is enabled and feedback hasn't been given
+                    # Create a unique key that includes the warning text
+                    feedback_key = f"{result['AIC Code']}_{result['ICD Code']}_{hash(result['Warning (Italian)'])}"
+                    if (
+                        enable_feedback
+                        and feedback_key not in st.session_state.feedback_given
+                    ):
+                        # Create unique keys for each warning's feedback buttons
+                        accept_key = f"accept_{idx}"
+                        reject_key = f"reject_{idx}"
+
+                        # Add feedback buttons in columns
+                        col1, col2, col3 = st.columns([1, 1, 3])
+                        with col1:
+                            if st.button("✅ Accept Warning", key=accept_key):
+                                feedback = {
+                                    "timestamp": datetime.now().isoformat(),
+                                    "aic_code": result["AIC Code"],
+                                    "icd_code": result["ICD Code"],
+                                    "warning": result["Warning (Italian)"],
+                                    "feedback": "accepted",
+                                }
+                                save_feedback(feedback)
+                                st.session_state.feedback_given.add(feedback_key)
+                                st.success("Feedback saved - Warning Accepted")
+                                st.rerun()
+
+                        with col2:
+                            if st.button("❌ Reject Warning", key=reject_key):
+                                feedback = {
+                                    "timestamp": datetime.now().isoformat(),
+                                    "aic_code": result["AIC Code"],
+                                    "icd_code": result["ICD Code"],
+                                    "warning": result["Warning (Italian)"],
+                                    "feedback": "rejected",
+                                }
+                                save_feedback(feedback)
+                                st.session_state.feedback_given.add(feedback_key)
+                                st.success("Feedback saved - Warning Rejected")
+                                st.rerun()
         if not warning_found:
-            st.success("✅ No warnings found for the selected combination.")
-elif selected_patient and not selected_aic:
-    st.info("Please select an AIC code to check for interactions.")
-elif selected_aic and not selected_patient:
-    st.info("Please select a patient to check for interactions.")
-else:
-    st.info("Please select a patient and an AIC code to view warnings.")
-
-# Debug information (expandable)
-with st.expander("Debug Information"):
-    st.write(f"Total AIC codes available: {len(aic_codes)}")
-    st.write(f"Total ICD codes available: {len(icd11_database)}")
-    st.write(f"Total interaction combinations: {len(interaction_matrix)}")
-
-    if selected_aic:
-        available_icds_for_aic = list(aic_icd_mapping.get(selected_aic, {}).keys())
-        st.write(
-            f"ICD codes with interactions for AIC {selected_aic}: {len(available_icds_for_aic)}"
-        )
-        if available_icds_for_aic:
-            st.write(
-                "Available ICD codes for this AIC:", available_icds_for_aic[:10]
-            )  # Show first 10
+            st.markdown(
+                """
+                <div style='padding: 1rem; border-radius: 0.5rem; background-color: #f0f2f6; color: #31333F'>
+                Based on the information of the drug leaflet and the ICD description, no contraindication has been found.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
