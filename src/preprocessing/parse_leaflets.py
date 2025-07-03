@@ -91,7 +91,7 @@ def extract_numbered_sections(md_text: str) -> List[Tuple[int, str, str]]:
 
     # Fix extra spaces and clean up formatting
     clean_text = re.sub(r"(\d+)\s*\.\s+", r"\1. ", clean_text)
-    clean_text = re.sub(r"\s+", " ", clean_text)  # Normalize all whitespace
+    # clean_text = re.sub(r"\s+", " ", clean_text)  # Normalize all whitespace
     clean_text = re.sub(r"\n\s*\n", "\n", clean_text)  # Remove empty lines
 
     # CRITICAL: Fix broken Italian words AFTER removing watermarks
@@ -99,7 +99,10 @@ def extract_numbered_sections(md_text: str) -> List[Tuple[int, str, str]]:
 
     # Step 2: Define section patterns - ONLY match actual
     valid_section_patterns = [
-        (1, r"^\s*1\s*\.\s+(Cos[aè].*e a cosa serve|What.*is.*and what.*is.*used for)"),
+        (
+            1,
+            r"^\s*1\s*\.\s+(CHE COS.*?E A.*?COSA SERVE|Che cos.*?e a.*?cosa serve|Che cosa.*?e a.*?cosa serve|Cos.*?è.*?e a.*?cosa serve|What.*?is.*?and what.*?is.*?used for)",
+        ),
         (
             2,
             r"^\s*2\s*\.\s+(?:Cosa\s+deve\s+sapere\s+prima|Che cosa deve sapere|Prima\s+di|What.*you\s+need\s+to\s+know\s+before|Before.*you.*take)",
@@ -120,6 +123,12 @@ def extract_numbered_sections(md_text: str) -> List[Tuple[int, str, str]]:
     unnumbered_section_patterns = [
         (2, r"^\s*CONTROINDICAZIONI\s*$"),
         (2, r"^\s*Controindicazioni\s*$"),
+        (1, r"^\s*INDICAZIONI TERAPEUTICHE\s*$"),
+        (1, r"^\s*cos.*?e a.*?cosa serve\s*$"),
+        (
+            1,
+            r"^\s*\d+\s*\.\s*(?:CHE COS.*?E A.*?COSA SERVE|Che cos.*?è.*?e a.*?cosa serve|Che cosa è.*?e a.*?cosa serve|Cos.*?è.*?e a.*?cosa serve)",
+        ),
     ]
 
     headers = []
@@ -190,7 +199,12 @@ def extract_section_from_leaflets(
     """
     Extracts a specific section from all markdown files in the input directory
     and saves them to the output directory.
+
+    Fallback behavior when section is not found:
+    - Section 1: Save first 2000 characters
+    - Other sections: Save entire text
     """
+    output_dir = output_dir + f"/section_{section_num}"
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     files_without_section = 0
     files_processed = 0
@@ -212,9 +226,26 @@ def extract_section_from_leaflets(
             else:
                 files_without_section += 1
 
+                # Different fallback behavior based on section number
+                with open(output_filename, "w", encoding="utf-8") as out_f:
+                    if section_num == 1:
+                        # For section 1: save first 2000 characters
+                        out_f.write(md_text[:2000])
+                    else:
+                        # For other sections: save entire text
+                        out_f.write(md_text)
+
     print(f"📊 SUMMARY:")
     print(f"Files processed: {files_processed}")
     print(
         f"Files with section {section_num}: {files_processed - files_without_section}"
     )
     print(f"Files without section {section_num}: {files_without_section}")
+    if section_num == 1:
+        print(
+            f"Files saved with first 2000 chars (no section 1 found): {files_without_section}"
+        )
+    else:
+        print(
+            f"Files saved with entire text (no section {section_num} found): {files_without_section}"
+        )
