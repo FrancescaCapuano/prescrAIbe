@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Il mio esperimento</title>
+    <script src="https://unpkg.com/jspsych@8.2.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-instructions@2.1.0"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2.1.0"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-image-keyboard-response@2.1.0"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-preload@2.1.0"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@2.1.0"></script>
+    <script src="test_stimuli.js"></script> <!-- Include external file -->
+    <link href="https://unpkg.com/jspsych@8.2.1/css/jspsych.css" rel="stylesheet" type="text/css" />
+</head>
+
+<body></body>
+<script>
+
+    /* initialize jsPsych */
+    var jsPsych = initJsPsych({
+        on_finish: function () {
+            jsPsych.data.displayData();
+        }
+    });
+
+    /* create timeline */
+    var timeline = [];
+
+    /* define welcome message trial */
+    var welcome = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: "<p>Benvenuto nel nostro sondaggio medico.</p> <p>Premi un tasto per iniziare.</p>"
+    };
+    timeline.push(welcome);
+
+    /* define instructions trial using instructions plugin */
+    var instructions = {
+        type: jsPsychInstructions,
+        pages: [
+            `<div style="max-width: 1000px; margin: 0 auto; text-align: left; padding: 20px;">
+            <h2 style="text-align: center;">Studio sulla decisione medica</h2>
+            
+            <p><strong>Scopo:</strong> Abbiamo bisogno della tua esperienza medica per valutare le potenziali interazioni farmaco-patologia.</p>
+            
+            <p><strong>Compito:</strong> Per ogni caso, vedrai:</p>
+            <ul>
+                <li><strong>Controindicazione:</strong> Un avviso o precauzione da un foglietto illustrativo del farmaco</li>
+                <li><strong>Condizione ICD:</strong> Una condizione medica secondo la Classificazione Internazionale delle Malattie</li>
+            </ul>
+            
+            <p><strong>La tua decisione:</strong> Basandoti sulla tua conoscenza medica, determina se la controindicazione è clinicamente rilevante per la condizione data.</p>
+            
+            <div style='margin: 30px 0; text-align: center; display: flex; justify-content: space-around; align-items: flex-start;'>
+                <div style='flex: 1; text-align: center; padding: 0 20px;'>
+                    <img src='img/warning.png' style="width: 80px; height: auto;">
+                    <p style='margin-top: 10px;'><strong>Avviso</strong></p>
+                    <p style='font-size: 14px; color: #666;'>Emetti un avviso se la controindicazione è clinicamente rilevante per questa condizione</p>
+                </div>
+                <div style='flex: 1; text-align: center; padding: 0 20px;'>
+                    <img src='img/no_warning.png' style="width: 80px; height: auto;">
+                    <p style='margin-top: 10px;'><strong>Nessun Avviso</strong></p>
+                    <p style='font-size: 14px; color: #666;'>Non emettere un avviso se la controindicazione non è rilevante per questa condizione</p>
+                </div>
+            </div>
+            
+            <div style="background-color: #f0f8ff; border-left: 4px solid #007cba; padding: 15px; margin: 20px 0;">
+                <p><strong>Considerazioni cliniche:</strong></p>
+                <ul style="margin: 5px 0;">
+                    <li>La controindicazione è direttamente correlata alla condizione medica?</li>
+                    <li>Un paziente con questa condizione sarebbe a rischio maggiore se gli venisse somministrato questo farmaco?</li>
+                    <li>La relazione clinica è chiara e sufficientemente significativa da giustificare un avviso?</li>
+                </ul>
+            </div>
+        </div>`,
+
+            `<div style="max-width: 800px; margin: 0 auto; text-align: center; padding: 40px;">
+            <div style="background-color: #ffebee; border: 2px solid #f44336; border-radius: 8px; padding: 30px; margin: 20px 0;">
+                <h2 style="color: #d32f2f; margin-bottom: 20px;">⚠️ ATTENZIONE</h2>
+                <p style="color: #d32f2f; font-size: 18px; font-weight: bold; margin-bottom: 15px;">
+                    Il sondaggio sta per iniziare.
+                </p>
+                <p style="color: #d32f2f; font-size: 16px; margin-bottom: 20px;">
+                    Sei sicuro di aver compreso le istruzioni?
+                </p>
+                <p style="color: #d32f2f; font-size: 14px;">
+                    Se non sei sicuro, usa il pulsante "Indietro" per rivedere le istruzioni.
+                </p>
+            </div>
+            
+            <div style="margin-top: 40px;">
+                <p style="font-size: 16px; margin-bottom: 10px;">
+                    <strong>Clicca "Avanti" per iniziare il sondaggio</strong>
+                </p>
+            </div>
+        </div>`
+        ],
+        show_clickable_nav: true,
+        button_label_previous: 'Indietro',
+        button_label_next: 'Avanti'
+    };
+    timeline.push(instructions);
+
+    // test_stimuli is now loaded from test_stimuli.js - no need to define it here!
+
+    var test_trial = {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: jsPsych.timelineVariable('stimulus'),
+        choices: ['Avviso', 'Nessun Avviso'],
+        prompt: "<p>Emetteresti un avviso?</p>",
+        button_html: (choice, choice_index) => {
+            const imageSrc = choice_index === 0 ? "img/warning.png" : "img/no_warning.png";
+            return `<button style="width:100px; height:80px; margin:15px; padding:8px; border:2px solid #007cba; border-radius:6px; cursor:pointer; background-color:white;">
+                <img src="${imageSrc}" style="width:30px; height:30px; display:block; margin:0 auto 5px auto;">
+                <div style="font-size:12px;">${choice}</div>
+                </button>`;
+        }
+    };
+
+    var test_timeline = {
+        timeline: [test_trial],
+        timeline_variables: test_stimuli,  // Now using the external file
+        randomize_order: true,
+        repetitions: 1
+    };
+
+    timeline.push(test_timeline);
+
+    /* define debrief */
+    var debrief_block = {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+        <div style="text-align: center; padding: 40px;">
+            <p>Questo è la fine del nostro sondaggio.</p>
+            <h2>Grazie per aver partecipato!</h2>
+            <p>Le tue risposte sono state registrate e ci aiuteranno a migliorare i sistemi di decisione medica.</p>
+            <p>Premi un tasto per completare il sondaggio.</p>
+        </div>
+    `
+    };
+    timeline.push(debrief_block);
+
+    /* start the experiment */
+    jsPsych.run(timeline);
+
+</script>
+
+</html>

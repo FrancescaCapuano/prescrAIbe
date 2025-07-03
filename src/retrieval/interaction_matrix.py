@@ -260,17 +260,3 @@ class InteractionMatrixBuilder:
             Path to the saved interaction matrix file
         """
         return process_retrieval_results_to_matrix(results_file, output_dir)
-
-
-if __name__ == "__main__":
-
-    # Load matrix from file
-    matrix_builder = InteractionMatrixBuilder()
-    matrix_file = "data/interaction_matrix/interaction_matrix.json"
-    matrix = matrix_builder.load_matrix(matrix_file)
-
-    # Example usage
-    aic_code = "030705026"
-    icd_code = "3B64.Z"
-    interactions = matrix_builder.get_interactions(aic_code, icd_code, matrix_file)
-    print(interactions)
