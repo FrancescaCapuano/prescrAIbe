@@ -13,6 +13,40 @@ st.set_page_config(
 )
 
 
+# First, load the drug names from the Excel file
+def load_drug_names():
+    drug_names = {}
+    try:
+        # Read Excel file with explicit data types
+        df = pd.read_excel(
+            "data/leaflets/estrazione_farmaci_downloaded.xlsx",
+            dtype={
+                "code": str,  # Force code column to be string
+                "name": str,  # Force name column to be string
+            },
+        )
+
+        # Clean the data
+        df["code"] = df["code"].astype(str).str.strip()
+        df["name"] = df["name"].astype(str).str.strip()
+
+        # Remove any rows where code or name is empty/null
+        df = df.dropna(subset=["code", "name"])
+
+        # Create mapping from AIC code to name
+        for _, row in df.iterrows():
+            code = str(row["code"]).strip()
+            name = str(row["name"]).strip()
+            if code and name:  # Only add if both code and name are non-empty
+                drug_names[code] = name
+
+    except Exception as e:
+        st.error(f"Error loading drug names from Excel: {e}")
+        return {}
+
+    return drug_names
+
+
 # Load data using InteractionMatrixBuilder
 @st.cache_resource
 def load_all_data():
@@ -22,6 +56,9 @@ def load_all_data():
     interaction_matrix = matrix_builder.load_matrix(
         "data/interaction_matrix/interaction_matrix.json"
     )
+
+    # Load drug names from CSV
+    aic_name_map = load_drug_names()
 
     # Load the new ICD11 vector DB
     with open(
@@ -43,7 +80,6 @@ def load_all_data():
 
     aic_codes = set()
     aic_icd_mapping = {}
-    aic_name_map = {}
 
     for composite_key, warnings_list in interaction_matrix.items():
         if "|" in composite_key:
@@ -52,12 +88,7 @@ def load_all_data():
             if aic_code not in aic_icd_mapping:
                 aic_icd_mapping[aic_code] = {}
             aic_icd_mapping[aic_code][icd_code] = warnings_list
-            # Extract AIC name from the first warning (assuming all warnings for this combo have the same AIC name)
-            if warnings_list and aic_code not in aic_name_map:
-                # Try to get AIC name from the matrix entry, fallback to code
-                aic_name_map[aic_code] = warnings_list[0].get(
-                    "aic_name", warnings_list[0].get("AIC-code", "Name not found")
-                )
+
     return (
         interaction_matrix,
         icd11_database,
@@ -169,6 +200,9 @@ def get_icd_display_name(icd_code, icd11_database):
 
 def get_aic_display_name(aic_code, aic_name_map):
     """Get display name for AIC code"""
+    # Convert aic_code to string and strip any whitespace
+    aic_code = str(aic_code).strip()
+    # Get the name from aic_name_map, default to "Name not found" if not found
     name = aic_name_map.get(aic_code, "Name not found")
     return f"{aic_code} - {name}"
 
@@ -369,7 +403,10 @@ else:
 # AIC code selector
 aic_options = [get_aic_display_name(code, aic_name_map) for code in aic_codes]
 selected_aic_display = st.selectbox(
-    "Select Drug", options=[""] + aic_options, index=0, key="aic_selector"
+    "Select Drug",
+    options=[""] + sorted(aic_options),  # Sort the options for better usability
+    index=0,
+    key="aic_selector",
 )
 selected_aic = selected_aic_display.split(" - ")[0] if selected_aic_display else ""
 
@@ -474,7 +511,7 @@ if selected_patient and selected_aic and patient_icd_codes:
 **IT**: {result['Warning (Italian)']}"""
 
                         if result["Warning (English)"]:
-                            warning_text += f"\n\n**EN**: {result['Warning (English']}"
+                            warning_text += f"\n\n**EN**: {result['Warning (English)']}"
 
                         if result["AIC URL"] != "N/A":
                             warning_text += (
