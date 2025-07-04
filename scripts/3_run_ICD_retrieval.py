@@ -3,9 +3,9 @@ Script to run the contraindication similarity search pipeline: process pharmaceu
 contraindications and find similar ICD-11 conditions using vector embeddings.
 
 Usage:
-    python scripts/3_run_retrieval.py
-    python scripts/3_run_retrieval.py --aic-codes 045034307 --category condition
-    python scripts/3_run_retrieval.py --model sentence-transformers/all-mpnet-base-v2 --aic-codes 030705026 044077028 041445014 044856060 023779061 034949026 040409017 042342016 008679021 025373073 036906055 041508019 023892033 035077015 028282376 934521384 934521358 038016109 029354192 023309103 --category condition
+    python scripts/3_run_ICD_retrieval.py
+    python scripts/3_run_ICD_retrieval.py --aic-codes 045034307 --category condition
+    python scripts/3_run_ICD_retrieval.py --model sentence-transformers/all-mpnet-base-v2 --aic-codes 030705026 044077028 041445014 044856060 023779061 034949026 040409017 042342016 008679021 025373073 036906055 041508019 023892033 035077015 028282376 934521384 934521358 038016109 029354192 023309103 --category condition
 """
 
 import sys
@@ -52,7 +52,7 @@ def main():
     # # Generate paths
     # root_dir = Path(__file__).parent.parent
 
-    # vectordb_path = root_dir / "data" / "vector_db" / "chroma_langchain_db"
+    # vectordb_path = root_dir / "data" / "vector_dbs" /"ICD_db" / "chroma_langchain_db"
     # contraindications_path = (
     #     root_dir / "data" / "contraindications" / "all_contraindications.json"
     # )

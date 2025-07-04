@@ -42,7 +42,7 @@ def main():
     CHUNK_OVERLAP = 100
 
     # Use single vector database directory
-    persist_dir = "data/vector_dbs/vector_db/chroma_langchain_db"
+    persist_dir = "data/vector_dbs/ICD_db/chroma_langchain_db"
 
     print(f"\n📊 Configuration:")
     print(f"   Data file: {DATA_FILE} (fixed)")
