@@ -236,3 +236,71 @@ def convert_icd_to_documents(icd_descriptions):
 
     print(f"✅ Converted {len(icd_docs)} ICD descriptions to Document objects")
     return icd_docs
+
+
+def convert_leaflets_to_documents(leaflet_data):
+    """
+    Convert a list of drug leaflet data dictionaries to LangChain Document objects.
+
+    Args:
+        leaflet_data: List of dictionaries with 'aic', 'aic_url', 'description' keys
+
+    Returns:
+        List of LangChain Document objects with drug-specific metadata
+    """
+    from langchain.schema import Document
+
+    documents = []
+    for item in leaflet_data:
+        metadata = {
+            "aic": item.get("aic"),
+            "aic_url": item.get("aic_url"),
+        }
+
+        doc = Document(
+            page_content=item["description"],
+            metadata=metadata,
+        )
+        documents.append(doc)
+
+    return documents
+
+
+def load_section_files(data_dir):
+    """
+    Load all markdown files from a section directory and convert to a format
+    suitable for indexing.
+    """
+    from pathlib import Path
+    from src.llm_extraction.extraction import (
+        extract_aic_from_filename,
+        extract_sis_from_filename,
+        generate_url,
+    )
+
+    section_data = []
+    data_path = Path(data_dir)
+
+    if not data_path.exists():
+        raise FileNotFoundError(f"Directory not found: {data_dir}")
+
+    for md_file in data_path.glob("*.md"):
+        with open(md_file, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+
+        if content:  # Only add non-empty files
+            # Extract metadata
+            aic = extract_aic_from_filename(md_file.name)
+            aic6 = aic[:6] if aic and len(aic) >= 6 else None
+            codice_sis = extract_sis_from_filename(md_file.name)
+            url = generate_url(aic6, codice_sis)
+
+            section_data.append(
+                {
+                    "aic": aic,
+                    "aic_url": url,
+                    "description": content,
+                }
+            )
+
+    return section_data

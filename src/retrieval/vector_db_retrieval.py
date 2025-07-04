@@ -338,62 +338,390 @@ class ContraindicationRetriever:
         return str(filepath)
 
 
-def filter_contraindications_by_category(
-    contraindications_data: List[Dict], category: str
-) -> List[Dict]:
-    """Filter contraindications by category."""
-    filtered_aics = []
-    total_before = sum(
-        len(aic_data.get("contraindications", []))
-        for aic_data in contraindications_data
-    )
-    total_after = 0
+class Section1Retriever:
+    """Retriever for comparing drug leaflet section 1 content."""
 
-    for aic_data in contraindications_data:
-        filtered_contraindications = [
-            contraindication
-            for contraindication in aic_data.get("contraindications", [])
-            if contraindication.get("category", "").lower() == category.lower()
+    def __init__(self, vectordb_path, results_path, model_name):
+        self.vectordb_path = Path(vectordb_path)
+        self.results_path = Path(results_path)
+        self.results_path.mkdir(parents=True, exist_ok=True)
+        self.model_name = model_name
+        self.checkpoint_file = self.results_path / "section1_checkpoint.json"
+
+        self._init_embedding_model()
+        self._init_chromadb()
+
+    def _init_embedding_model(self):
+        """Initialize embedding model based on model type."""
+        print(f"🔧 Initializing embedding model: {self.model_name}")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        if self.model_name == "jinaai/jina-embeddings-v3":
+            print("🎯 Using Jina embeddings")
+            self.embedding_function = JinaEmbeddingFunction(self.model_name, device)
+        else:
+            print("🎯 Using standard SentenceTransformer embeddings")
+            self.embedding_function = (
+                embedding_functions.SentenceTransformerEmbeddingFunction(
+                    model_name=self.model_name, device=device
+                )
+            )
+
+    def _init_chromadb(self):
+        """Initialize ChromaDB connection."""
+        print("🔧 Connecting to ChromaDB...")
+        self.client = chromadb.PersistentClient(
+            path=str(self.vectordb_path), settings=Settings(anonymized_telemetry=False)
+        )
+        self.collection = self.client.get_collection("collection_section_1")
+        print(f"✅ Connected to collection with {self.collection.count():,} documents")
+
+    def _distance_to_similarity(self, distance: float) -> float:
+        """Convert distance score to similarity score (0-1 range, higher = more similar)."""
+        return max(0.0, min(1.0, 1.0 - distance))
+
+    def get_all_documents(self):
+        """Get all documents from the vector database."""
+        try:
+            all_data = self.collection.get(
+                include=["documents", "metadatas", "embeddings"]
+            )
+
+            documents = []
+            for i in range(len(all_data["ids"])):
+                # Safe access to embeddings - check if embeddings exist and handle numpy arrays
+                embedding = None
+                if (
+                    all_data.get("embeddings") is not None
+                    and len(all_data["embeddings"]) > i
+                ):
+                    embedding = all_data["embeddings"][i]
+
+                # Safe access to metadata
+                metadata = {}
+                if (
+                    all_data.get("metadatas") is not None
+                    and len(all_data["metadatas"]) > i
+                ):
+                    metadata = all_data["metadatas"][i] or {}
+
+                documents.append(
+                    {
+                        "id": all_data["ids"][i],
+                        "document": all_data["documents"][i],
+                        "metadata": metadata,
+                        "embedding": embedding,
+                    }
+                )
+
+            print(f"✅ Successfully retrieved {len(documents)} documents")
+            return documents
+
+        except Exception as e:
+            print(f"❌ Error retrieving documents: {e}")
+            import traceback
+
+            traceback.print_exc()  # This will show the full error trace
+            return []
+
+    def search_similar_drugs(
+        self,
+        query_document: str,
+        max_results: int = 10,
+        use_statistical_filter: bool = False,
+        devs: float = 2.0,
+        exclude_id: str = None,
+    ) -> List[Dict[str, Any]]:
+        """Find similar drugs using the same logic as contraindication search."""
+
+        # Use more results for statistical filtering
+        n_results = min(
+            5000 if use_statistical_filter else max_results * 3, self.collection.count()
+        )
+
+        # Generate embedding and search
+        query_embedding = self.embedding_function([query_document])
+
+        # Search with optional exclusion of self
+        where_clause = {}
+        if exclude_id:
+            where_clause = {"id": {"$ne": exclude_id}}
+
+        results = self.collection.query(
+            query_embeddings=query_embedding,
+            n_results=n_results,
+            include=["documents", "metadatas", "distances"],
+            where=where_clause if where_clause else None,
+        )
+
+        # Check if results exist and have valid data
+        if (
+            not results
+            or not results.get("ids")
+            or not results["ids"]
+            or not results["ids"][0]
+        ):
+            return []
+
+        # Format results
+        formatted_results = []
+        for i in range(len(results["ids"][0])):
+            metadata = {}
+            if (
+                results.get("metadatas")
+                and results["metadatas"]
+                and len(results["metadatas"]) > 0
+                and len(results["metadatas"][0]) > i
+                and isinstance(results["metadatas"][0][i], dict)
+            ):
+                metadata = results["metadatas"][0][i]
+
+            formatted_results.append(
+                {
+                    "id": results["ids"][0][i],
+                    "document": results["documents"][0][i],
+                    "metadata": metadata,
+                    "distance": results["distances"][0][i],
+                    "similarity": self._distance_to_similarity(
+                        results["distances"][0][i]
+                    ),
+                }
+            )
+
+        # Apply statistical filtering if requested (same as ContraindicationRetriever)
+        if use_statistical_filter and len(formatted_results) > 1:
+            distances = np.array([r["distance"] for r in formatted_results])
+            median = np.median(distances)
+            mad = median_abs_deviation(distances)
+            robust_z_scores = (distances - median) / mad
+            # Keep results with LOW distances (high similarity)
+            formatted_results = [
+                r for r, z in zip(formatted_results, robust_z_scores) if z < -devs
+            ]
+
+        # Sort by distance (ascending = most similar first)
+        formatted_results.sort(key=lambda x: x["distance"])
+
+        # Return top max_results
+        return formatted_results[:max_results]
+
+    def compare_all_vs_all(
+        self,
+        max_results=10,
+        use_statistical_filter=False,
+        devs=2.0,
+        save_checkpoint_every=10,
+    ):
+        """Compare every document against all others with statistical filtering."""
+
+        documents = self.get_all_documents()
+        if not documents:
+            print("❌ No documents found in the vector database.")
+            return {}
+
+        print(f"🎯 Starting all-vs-all comparison for {len(documents)} drugs")
+        print(f"📊 Configuration:")
+        print(f"   Max results per query: {max_results}")
+        print(
+            f"   Statistical filtering: {'enabled' if use_statistical_filter else 'disabled'}"
+        )
+        if use_statistical_filter:
+            print(f"   Deviation threshold: {devs}")
+
+        # Load checkpoint or start fresh
+        save_checkpoint, load_checkpoint, clear_checkpoint = (
+            self._checkpoint_operations()
+        )
+        checkpoint_results, start_index = load_checkpoint()
+
+        all_results = checkpoint_results or {
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "total_drugs": len(documents),
+                "max_results_per_query": max_results,
+                "use_statistical_filter": use_statistical_filter,
+                "devs": devs if use_statistical_filter else None,
+                "model_name": self.model_name,
+            },
+            "drug_results": [],
+        }
+
+        drug_pbar = tqdm(
+            documents[start_index:],
+            desc="Processing drugs",
+            unit="drugs",
+            colour="blue",
+            initial=start_index,
+            total=len(documents),
+        )
+
+        try:
+            for relative_index, query_doc in enumerate(drug_pbar):
+                actual_index = start_index + relative_index
+                query_id = query_doc["id"]
+                query_content = query_doc["document"]
+
+                drug_pbar.set_postfix(
+                    {
+                        "Current Drug": (
+                            query_id[:20] + "..." if len(query_id) > 20 else query_id
+                        ),
+                        "Index": f"{actual_index + 1}/{len(documents)}",
+                    }
+                )
+
+                # Find similar drugs (exclude self)
+                similar_drugs = self.search_similar_drugs(
+                    query_content,
+                    max_results=max_results,
+                    use_statistical_filter=use_statistical_filter,
+                    devs=devs,
+                    exclude_id=query_id,
+                )
+
+                drug_result = {
+                    "query_drug": {
+                        "id": query_id,
+                        "metadata": query_doc.get("metadata", {}),
+                        "content_preview": (
+                            query_content[:200] + "..."
+                            if len(query_content) > 200
+                            else query_content
+                        ),
+                    },
+                    "similar_drugs": similar_drugs,
+                    "similarity_count": len(similar_drugs),
+                }
+
+                all_results["drug_results"].append(drug_result)
+
+                # Save checkpoint periodically
+                if (actual_index + 1) % save_checkpoint_every == 0:
+                    save_checkpoint(all_results, actual_index + 1)
+                    tqdm.write(f"💾 Checkpoint saved after drug {actual_index + 1}")
+
+        except KeyboardInterrupt:
+            print(f"\n⚠️ Process interrupted! Saving checkpoint...")
+            save_checkpoint(all_results, start_index + relative_index)
+            print(f"💾 Progress saved. Resume by running the script again.")
+            raise
+        except Exception as e:
+            print(f"\n❌ Error occurred: {e}")
+            save_checkpoint(all_results, start_index + relative_index)
+            print(f"💾 Progress saved. Resume by running the script again.")
+            raise
+
+        clear_checkpoint()
+        return all_results
+
+    def _checkpoint_operations(self):
+        """Checkpoint management methods (same as ContraindicationRetriever)."""
+
+        def save_checkpoint(results: Dict[str, Any], current_drug_index: int):
+            checkpoint_data = {
+                "results": results,
+                "current_drug_index": current_drug_index,
+                "timestamp": datetime.now().isoformat(),
+            }
+            with open(self.checkpoint_file, "w", encoding="utf-8") as f:
+                json.dump(checkpoint_data, f, indent=2, ensure_ascii=False)
+
+        def load_checkpoint():
+            if not self.checkpoint_file.exists():
+                print("📄 No checkpoint found, starting fresh...")
+                return None, 0
+
+            print(f"📄 Found checkpoint file: {self.checkpoint_file}")
+            try:
+                with open(self.checkpoint_file, "r", encoding="utf-8") as f:
+                    checkpoint_data = json.load(f)
+                results = checkpoint_data["results"]
+                current_drug_index = checkpoint_data["current_drug_index"]
+                print(f"✅ Loaded checkpoint from {checkpoint_data['timestamp']}")
+                print(f"🔄 Resuming from drug index {current_drug_index}")
+                return results, current_drug_index
+            except Exception as e:
+                print(f"❌ Error loading checkpoint: {e}")
+                return None, 0
+
+        def clear_checkpoint():
+            if self.checkpoint_file.exists():
+                self.checkpoint_file.unlink()
+                print("🗑️ Checkpoint file cleared")
+
+        return save_checkpoint, load_checkpoint, clear_checkpoint
+
+    def save_all_results(self, results):
+        """Save the similarity results to file."""
+        filepath = self.results_path / "section1_similarity_results.json"
+
+        print("💾 Saving final results to file...")
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+
+        print(f"✅ All results saved to: {filepath}")
+        return str(filepath)
+
+    def create_similarity_matrix(self, results):
+        """Create a similarity matrix from results."""
+        import pandas as pd
+
+        # Extract all drug IDs
+        drug_ids = [
+            drug_result["query_drug"]["id"] for drug_result in results["drug_results"]
         ]
 
-        if filtered_contraindications:
-            aic_data_copy = aic_data.copy()
-            aic_data_copy["contraindications"] = filtered_contraindications
-            filtered_aics.append(aic_data_copy)
-            total_after += len(filtered_contraindications)
+        # Create similarity matrix
+        matrix = np.zeros((len(drug_ids), len(drug_ids)))
 
-    print(
-        f"📊 Category '{category}': {total_after}/{total_before} contraindications "
-        f"({100*total_after/total_before:.1f}%) in {len(filtered_aics)} AICs"
-    )
-    return filtered_aics
+        for i, drug_result in enumerate(results["drug_results"]):
+            for similar_drug in drug_result["similar_drugs"]:
+                j = (
+                    drug_ids.index(similar_drug["id"])
+                    if similar_drug["id"] in drug_ids
+                    else -1
+                )
+                if j >= 0:
+                    matrix[i][j] = similar_drug["similarity"]
+
+        # Save as CSV
+        df = pd.DataFrame(matrix, index=drug_ids, columns=drug_ids)
+        matrix_path = self.results_path / "similarity_matrix.csv"
+        df.to_csv(matrix_path)
+
+        print(f"📊 Similarity matrix saved to: {matrix_path}")
+        return str(matrix_path)
 
 
-def filter_contraindications_by_aic(
-    contraindications_data: List[Dict], aic_codes: List[str]
-) -> List[Dict]:
-    """Filter contraindications by AIC codes."""
-    # Convert to lowercase for case-insensitive matching
-    aic_codes_lower = [code.lower().strip() for code in aic_codes]
-
-    filtered_aics = []
-    total_before = sum(
-        len(aic_data.get("contraindications", []))
-        for aic_data in contraindications_data
-    )
-    total_after = 0
-
+def filter_contraindications_by_category(contraindications_data, category):
+    """Filter contraindications by category."""
+    filtered_data = []
     for aic_data in contraindications_data:
-        aic_code = aic_data.get("aic", "").lower().strip()
+        filtered_contraindications = [
+            ci
+            for ci in aic_data.get("contraindications", [])
+            if ci.get("category") == category
+        ]
+        if filtered_contraindications:
+            filtered_aic_data = aic_data.copy()
+            filtered_aic_data["contraindications"] = filtered_contraindications
+            filtered_data.append(filtered_aic_data)
 
-        # Check if this AIC code is in our filter list
-        if aic_code in aic_codes_lower:
-            filtered_aics.append(aic_data)
-            total_after += len(aic_data.get("contraindications", []))
+    print(f"🔍 Filtered to {len(filtered_data)} AICs with category '{category}'")
+    return filtered_data
 
-    print(
-        f"📊 AIC filtering: {total_after}/{total_before} contraindications "
-        f"({100*total_after/total_before:.1f}%) in {len(filtered_aics)}/{len(contraindications_data)} AICs"
-    )
-    print(f"🎯 Filtered AICs: {[aic['aic'] for aic in filtered_aics]}")
-    return filtered_aics
+
+def filter_contraindications_by_aic(contraindications_data, aic_codes):
+    """Filter contraindications by AIC codes."""
+    if not aic_codes:
+        return contraindications_data
+
+    aic_codes_set = set(aic_codes)
+    filtered_data = [
+        aic_data
+        for aic_data in contraindications_data
+        if aic_data.get("aic") in aic_codes_set
+    ]
+
+    print(f"🔍 Filtered to {len(filtered_data)} AICs from provided AIC codes")
+    return filtered_data
