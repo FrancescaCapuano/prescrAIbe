@@ -100,6 +100,64 @@ def save_feedback(feedback_data):
         json.dump(existing_feedback, f, indent=2)
 
 
+def find_safe_alternatives(aic_code, patient_icd_codes, aic_name_map, aic_icd_mapping):
+    """
+    Find alternative drugs that have no warnings for the patient's conditions.
+
+    Args:
+        aic_code (str): Current AIC code that has warnings
+        patient_icd_codes (list): List of patient's ICD codes
+        aic_name_map (dict): Mapping of AIC codes to names
+        aic_icd_mapping (dict): Mapping of AIC-ICD combinations to warnings
+
+    Returns:
+        list: List of tuples (aic_code, aic_name) of safe alternatives
+    """
+    # Load alternatives matrix
+    try:
+        with open("data/drug_alternatives_matrix/drug_alternatives.json", "r") as f:
+            alternatives_matrix = json.load(f)
+    except Exception as e:
+        st.error(f"Error loading alternatives matrix: {e}")
+        return []
+
+    # Get alternative drugs for the current AIC code
+    alternatives = alternatives_matrix.get(aic_code, [])
+    if not alternatives:
+        return []
+
+    safe_alternatives = []
+
+    # Check each alternative drug
+    for alt_aic in alternatives:
+        is_safe = True
+
+        # Skip if it's the same as the current drug
+        if alt_aic == aic_code:
+            continue
+
+        # Check if alternative has no warnings for any of patient's conditions
+        if alt_aic in aic_icd_mapping:
+            for icd_code in patient_icd_codes:
+                warnings = aic_icd_mapping[alt_aic].get(icd_code, [])
+                for warning in warnings:
+                    if (
+                        warning.get("warning", "")
+                        != "Based on the information of the drug leaflet and the ICD description, no contraindication has been found."
+                    ):
+                        is_safe = False
+                        break
+                if not is_safe:
+                    break
+
+        # If safe, add to list with its name
+        if is_safe:
+            alt_name = aic_name_map.get(alt_aic, "Name not found")
+            safe_alternatives.append((alt_aic, alt_name))
+
+    return safe_alternatives
+
+
 def get_icd_display_name(icd_code, icd11_database):
     """Get display name for ICD code"""
     if icd_code in icd11_database:
@@ -315,6 +373,20 @@ selected_aic_display = st.selectbox(
 )
 selected_aic = selected_aic_display.split(" - ")[0] if selected_aic_display else ""
 
+
+# Load the translated interaction matrix
+@st.cache_resource
+def load_translated_matrix():
+    with open(
+        "data/interaction_matrix/interaction_matrix_translated.json",
+        "r",
+        encoding="utf-8",
+    ) as f:
+        return json.load(f)
+
+
+translated_matrix = load_translated_matrix()
+
 # Only check if both patient and AIC are selected
 if selected_patient and selected_aic and patient_icd_codes:
     results = []
@@ -322,6 +394,16 @@ if selected_patient and selected_aic and patient_icd_codes:
         warnings_data = aic_icd_mapping.get(selected_aic, {}).get(icd, [])
         if warnings_data:
             for warning_item in warnings_data:
+                # Get English translation if available
+                composite_key = f"{selected_aic}|{icd}"
+                eng_warning = None
+                if composite_key in translated_matrix:
+                    translated_warnings = translated_matrix[composite_key]
+                    for tw in translated_warnings:
+                        if tw.get("warning", "") == warning_item.get("warning", ""):
+                            eng_warning = tw.get("warning_eng")
+                            break
+
                 results.append(
                     {
                         "AIC Code": selected_aic,
@@ -336,6 +418,7 @@ if selected_patient and selected_aic and patient_icd_codes:
                             "N/A",
                         ),
                         "Warning (Italian)": warning_item.get("warning", "N/A"),
+                        "Warning (English)": eng_warning,
                         "AIC URL": warning_item.get("aic_url", "N/A"),
                     }
                 )
@@ -354,71 +437,121 @@ if selected_patient and selected_aic and patient_icd_codes:
                         "N/A",
                     ),
                     "Warning (Italian)": "Based on the information of the drug leaflet and the ICD description, no contraindication has been found.",
+                    "Warning (English)": None,
                     "AIC URL": "N/A",
                 }
             )
+
     if results:
         st.subheader("Warnings")
         warning_found = False
-        for idx, result in enumerate(results):
-            if (
-                result["Warning (Italian)"]
-                != "Based on the information of the drug leaflet and the ICD description, no contraindication has been found."
-            ):
-                warning_found = True
 
-                # Display warning in a container
-                with st.container():
-                    st.warning(
-                        f"""
-                        **AIC {result['AIC Code']} ({result['AIC Name']}) + ICD {result['ICD Code']} ({result['ICD Name']})**
-                        
-                        {result['Warning (Italian)']}
-                        
-                        [View AIC Details]({result['AIC URL']})
-                        """
+        # Group results by AIC-ICD combination
+        grouped_results = {}
+        for result in results:
+            combination_key = f"{result['AIC Code']}_{result['ICD Code']}"
+            if combination_key not in grouped_results:
+                grouped_results[combination_key] = []
+            grouped_results[combination_key].append(result)
+
+        # Process each group of warnings
+        for combination_key, group_results in grouped_results.items():
+            has_warnings = False
+
+            # Display all warnings for this combination
+            for idx, result in enumerate(group_results):
+                if (
+                    result["Warning (Italian)"]
+                    != "Based on the information of the drug leaflet and the ICD description, no contraindication has been found."
+                ):
+                    warning_found = True
+                    has_warnings = True
+
+                    # Display warning in a container
+                    with st.container():
+                        warning_text = f"""**AIC {result['AIC Code']} ({result['AIC Name']}) + ICD {result['ICD Code']} ({result['ICD Name']})**
+
+**IT**: {result['Warning (Italian)']}"""
+
+                        if result["Warning (English)"]:
+                            warning_text += f"\n\n**EN**: {result['Warning (English']}"
+
+                        if result["AIC URL"] != "N/A":
+                            warning_text += (
+                                f"\n\n[View AIC Details]({result['AIC URL']})"
+                            )
+
+                        st.warning(warning_text)
+
+                        # Only show feedback buttons if feedback is enabled and feedback hasn't been given
+                        feedback_key = f"{result['AIC Code']}_{result['ICD Code']}_{hash(result['Warning (Italian)'])}"
+                        if (
+                            enable_feedback
+                            and feedback_key not in st.session_state.feedback_given
+                        ):
+                            # Create unique keys for each warning's feedback buttons
+                            accept_key = f"accept_{combination_key}_{idx}"
+                            reject_key = f"reject_{combination_key}_{idx}"
+
+                            # Add feedback buttons in columns
+                            col1, col2, col3 = st.columns([1, 1, 3])
+                            with col1:
+                                if st.button("✅ Accept Warning", key=accept_key):
+                                    feedback = {
+                                        "timestamp": datetime.now().isoformat(),
+                                        "aic_code": result["AIC Code"],
+                                        "icd_code": result["ICD Code"],
+                                        "warning": result["Warning (Italian)"],
+                                        "feedback": "accepted",
+                                    }
+                                    save_feedback(feedback)
+                                    st.session_state.feedback_given.add(feedback_key)
+                                    st.success("Feedback saved - Warning Accepted")
+                                    st.rerun()
+
+                            with col2:
+                                if st.button("❌ Reject Warning", key=reject_key):
+                                    feedback = {
+                                        "timestamp": datetime.now().isoformat(),
+                                        "aic_code": result["AIC Code"],
+                                        "icd_code": result["ICD Code"],
+                                        "warning": result["Warning (Italian)"],
+                                        "feedback": "rejected",
+                                    }
+                                    save_feedback(feedback)
+                                    st.session_state.feedback_given.add(feedback_key)
+                                    st.success("Feedback saved - Warning Rejected")
+                                    st.rerun()
+
+            # After displaying all warnings for this combination, show alternatives if there were any warnings
+            if has_warnings:
+                # Get the AIC code from the first result in the group
+                aic_code = group_results[0]["AIC Code"]
+
+                # Find and display safe alternatives
+                safe_alternatives = find_safe_alternatives(
+                    aic_code,
+                    patient_icd_codes,
+                    aic_name_map,
+                    aic_icd_mapping,
+                )
+
+                if safe_alternatives:
+                    st.info(
+                        "**Consider switching to a potentially safer drug:**\n"
+                        + "\n".join(
+                            [
+                                f"- AIC {code} ({name})"
+                                for code, name in safe_alternatives
+                            ]
+                        )
                     )
+                else:
+                    st.info("ℹ️ No safe alternative medications found in the database.")
 
-                    # Only show feedback buttons if feedback is enabled and feedback hasn't been given
-                    # Create a unique key that includes the warning text
-                    feedback_key = f"{result['AIC Code']}_{result['ICD Code']}_{hash(result['Warning (Italian)'])}"
-                    if (
-                        enable_feedback
-                        and feedback_key not in st.session_state.feedback_given
-                    ):
-                        # Create unique keys for each warning's feedback buttons
-                        accept_key = f"accept_{idx}"
-                        reject_key = f"reject_{idx}"
+                # Add a separator between different AIC-ICD combinations
+                st.markdown("---")
 
-                        # Add feedback buttons in columns
-                        col1, col2, col3 = st.columns([1, 1, 3])
-                        with col1:
-                            if st.button("✅ Accept Warning", key=accept_key):
-                                feedback = {
-                                    "timestamp": datetime.now().isoformat(),
-                                    "aic_code": result["AIC Code"],
-                                    "icd_code": result["ICD Code"],
-                                    "warning": result["Warning (Italian)"],
-                                    "feedback": "accepted",
-                                }
-                                save_feedback(feedback)
-                                st.session_state.feedback_given.add(feedback_key)
-                                st.success("Feedback saved - Warning Accepted")
-                                st.rerun()
-
-                        with col2:
-                            if st.button("❌ Reject Warning", key=reject_key):
-                                feedback = {
-                                    "timestamp": datetime.now().isoformat(),
-                                    "aic_code": result["AIC Code"],
-                                    "icd_code": result["ICD Code"],
-                                    "warning": result["Warning (Italian)"],
-                                    "feedback": "rejected",
-                                }
-                                save_feedback(feedback)
-                                st.session_state.feedback_given.add(feedback_key)
-                                st.success("Feedback saved - Warning Rejected")
-                                st.rerun()
         if not warning_found:
             st.markdown(
                 """
