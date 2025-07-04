@@ -61,14 +61,7 @@ def main():
     extract_section_from_leaflets(
         args.processed_dir,
         "data/leaflets/sections",
-        section_num=2,  # Example section number, adjust as needed
-    )
-
-    # Extract a specific section 1 from the leaflets for therapeutic indications
-    extract_section_from_leaflets(
-        args.processed_dir,
-        "data/leaflets/sections",
-        section_num=1,  # Example section number, adjust as needed
+        section_num=2,
     )
 
 

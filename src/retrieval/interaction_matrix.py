@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 def process_retrieval_results_to_matrix(
-    results_file: str, output_dir: str = "data/interaction_matrix"
+    results_file: str, output_dir: str = "data/icd_drug_interactions"
 ) -> str:
     """
     Process retrieval results file to interaction matrix.
@@ -54,7 +54,7 @@ def process_retrieval_results_to_matrix(
 class InteractionMatrixBuilder:
     """Build interaction matrix from ContraindicationRetriever results."""
 
-    def __init__(self, output_dir: str = "data/interaction_matrix"):
+    def __init__(self, output_dir: str = "data/icd_drug_interactions"):
         """Initialize the interaction matrix builder."""
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -174,7 +174,7 @@ class InteractionMatrixBuilder:
         return f"Unknown AIC {aic}"
 
     def load_matrix(
-        self, matrix_file: str = "data/interaction_matrix/interaction_matrix.json"
+        self, matrix_file: str = "data/icd_drug_interactions/interaction_matrix.json"
     ) -> Dict[str, List[Dict]]:
         """
         Load interaction matrix from JSON file for efficient querying.
@@ -200,7 +200,7 @@ class InteractionMatrixBuilder:
         self,
         aic: str,
         icd: str,
-        matrix_file: str = "data/interaction_matrix/interaction_matrix.json",
+        matrix_file: str = "data/icd_drug_interactions/interaction_matrix.json",
     ) -> List[Dict[str, str]]:
         """
         Get interactions for specific AIC-ICD pair - O(1) lookup.
@@ -228,7 +228,7 @@ class InteractionMatrixBuilder:
         self,
         aic: str,
         icd: str,
-        matrix_file: str = "data/interaction_matrix/interaction_matrix.json",
+        matrix_file: str = "data/icd_drug_interactions/interaction_matrix.json",
     ) -> bool:
         """
         Check if AIC-ICD pair has any interactions - O(1) lookup.
@@ -247,7 +247,7 @@ class InteractionMatrixBuilder:
 
     @classmethod
     def process_retrieval_results_to_matrix(
-        cls, results_file: str, output_dir: str = "data/interaction_matrix"
+        cls, results_file: str, output_dir: str = "data/icd_drug_interactions"
     ) -> str:
         """
         Class method to process retrieval results to interaction matrix.
