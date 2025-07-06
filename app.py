@@ -8,8 +8,18 @@ from datetime import datetime
 from src.retrieval.interaction_matrix import InteractionMatrixBuilder
 
 st.set_page_config(
-    page_title="AI for Safer Prescriptions",
+    page_title="PrescrAIbe",
     page_icon="💊",  # This emoji will appear in the browser tab
+)
+
+# Add custom title with styled AI
+st.markdown(
+    """
+    <h1 style='text-align: left'>
+        💊 Prescr<span style='color: #FF8C00'>AI</span>be
+    </h1>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -159,6 +169,16 @@ def find_safe_alternatives(aic_code, patient_icd_codes, aic_name_map, aic_icd_ma
 
     safe_alternatives = []
 
+    # Load the URLs from interaction matrix
+    try:
+        with open(
+            "data/interaction_matrix/interaction_matrix.json", "r", encoding="utf-8"
+        ) as f:
+            interaction_matrix = json.load(f)
+    except Exception as e:
+        st.error(f"Error loading interaction matrix: {e}")
+        return []
+
     # Check each alternative drug
     for alt_aic in alternatives:
         is_safe = True
@@ -174,7 +194,7 @@ def find_safe_alternatives(aic_code, patient_icd_codes, aic_name_map, aic_icd_ma
                 for warning in warnings:
                     if (
                         warning.get("warning", "")
-                        != "Based on the information of the drug leaflet and the ICD description, no contraindication has been found."
+                        != "Based on the information of the drug leaflet and the condition(s), no contraindication has been found."
                     ):
                         is_safe = False
                         break
@@ -184,7 +204,17 @@ def find_safe_alternatives(aic_code, patient_icd_codes, aic_name_map, aic_icd_ma
         # If safe, add to list with its name
         if is_safe:
             alt_name = aic_name_map.get(alt_aic, "Name not found")
-            safe_alternatives.append((alt_aic, alt_name))
+            # Get URL from any warning entry for this drug
+            url = None
+            for key, warnings in interaction_matrix.items():
+                if key.startswith(alt_aic + "|"):
+                    for warning in warnings:
+                        if "aic_url" in warning:
+                            url = warning["aic_url"]
+                            break
+                    if url:
+                        break
+            safe_alternatives.append((alt_aic, alt_name, url))
 
     return safe_alternatives
 
@@ -211,7 +241,7 @@ def get_aic_display_name(aic_code, aic_name_map):
 st.sidebar.markdown(
     """
 **Project Information** \n
-This app checks for contraindications between existing diseases and drugs, that are prescibed by doctors. It was developed at Data Science Retreat.
+This app checks for contraindications between existing conditions and drugs, that are prescibed by doctors. It was developed at Data Science Retreat.
 
 **Contributors**: \n
 Francesca Capuano & Viktoria Leuschner
@@ -252,9 +282,6 @@ def load_patient_icd_mapping(csv_path):
 patient_icd_map, patient_list = load_patient_icd_mapping(
     "data/patients/snomed_icd_mapping.csv"
 )
-
-# Main UI
-st.title("💊 AI for Safer Prescriptions")
 
 # Patient selector in the main area
 selected_patient = st.selectbox(
@@ -473,7 +500,7 @@ if selected_patient and selected_aic and patient_icd_codes:
                         ),
                         "N/A",
                     ),
-                    "Warning (Italian)": "Based on the information of the drug leaflet and the ICD description, no contraindication has been found.",
+                    "Warning (Italian)": "Based on the information of the drug leaflet and the condition(s), no contraindication has been found.",
                     "Warning (English)": None,
                     "AIC URL": "N/A",
                 }
@@ -499,14 +526,14 @@ if selected_patient and selected_aic and patient_icd_codes:
             for idx, result in enumerate(group_results):
                 if (
                     result["Warning (Italian)"]
-                    != "Based on the information of the drug leaflet and the ICD description, no contraindication has been found."
+                    != "Based on the information of the drug leaflet and the condition(s), no contraindication has been found."
                 ):
                     warning_found = True
                     has_warnings = True
 
                     # Display warning in a container
                     with st.container():
-                        warning_text = f"""**AIC {result['AIC Code']} ({result['AIC Name']}) + ICD {result['ICD Code']} ({result['ICD Name']})**
+                        warning_text = f"""**{result['AIC Code']} ({result['AIC Name']}) + {result['ICD Code']} ({result['ICD Name']})**
 
 **IT**: {result['Warning (Italian)']}"""
 
@@ -514,9 +541,7 @@ if selected_patient and selected_aic and patient_icd_codes:
                             warning_text += f"\n\n**EN**: {result['Warning (English)']}"
 
                         if result["AIC URL"] != "N/A":
-                            warning_text += (
-                                f"\n\n[View AIC Details]({result['AIC URL']})"
-                            )
+                            warning_text += f"\n\n[View Leaflet]({result['AIC URL']})"
 
                         st.warning(warning_text)
 
@@ -574,15 +599,15 @@ if selected_patient and selected_aic and patient_icd_codes:
                 )
 
                 if safe_alternatives:
-                    st.info(
+                    alternative_text = (
                         "**Consider switching to a potentially safer drug:**\n"
-                        + "\n".join(
-                            [
-                                f"- AIC {code} ({name})"
-                                for code, name in safe_alternatives
-                            ]
-                        )
                     )
+                    for code, name, url in safe_alternatives:
+                        if url:
+                            alternative_text += f"- {code} - [{name}]({url})\n"
+                        else:
+                            alternative_text += f"- {code} - {name}\n"
+                    st.info(alternative_text)
                 else:
                     st.info("ℹ️ No safe alternative medications found in the database.")
 
@@ -590,11 +615,28 @@ if selected_patient and selected_aic and patient_icd_codes:
                 st.markdown("---")
 
         if not warning_found:
-            st.markdown(
-                """
+            # Get the URL for the selected drug from any warning entry
+            drug_url = None
+            for key, warnings in interaction_matrix.items():
+                if key.startswith(selected_aic + "|"):
+                    for warning in warnings:
+                        if "aic_url" in warning:
+                            drug_url = warning["aic_url"]
+                            break
+                    if drug_url:
+                        break
+
+            no_warning_text = """
                 <div style='padding: 1rem; border-radius: 0.5rem; background-color: #f0f2f6; color: #31333F'>
-                Based on the information of the drug leaflet and the ICD description, no contraindication has been found.
+                Based on the information of the drug leaflet and the condition(s), no contraindication has been found.
+                """
+            if drug_url:
+                no_warning_text += f"""
+                <br>
+                <a href="{drug_url}" target="_blank" style="color: #31333F; text-decoration: underline;">View Leaflet</a>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                """
+            else:
+                no_warning_text += "</div>"
+
+            st.markdown(no_warning_text, unsafe_allow_html=True)
