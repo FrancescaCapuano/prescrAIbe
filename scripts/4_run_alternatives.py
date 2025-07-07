@@ -78,6 +78,13 @@ def merge_estrazione_with_confezioni(confezioni_path, drugs_path):
     )  # Ensure AIC codes are 9 digits
     print(f"✅ Loaded {len(drugs)} drug records")
 
+    # Select only the drugs for which a leaflet exists
+    leaflets_processed_path = "data/leaflets/processed"
+    leaflet_files = [
+        f.stem.split("_")[-1] for f in Path(leaflets_processed_path).glob("*.md")
+    ]
+    drugs = drugs[drugs["code"].isin(leaflet_files)]
+
     # merge the two dataframes on codice_aic and code
     print("🔗 Merging datasets on AIC codes...")
     merged_df = pd.merge(
@@ -97,6 +104,7 @@ def build_drug_alternatives_matrix(merged_df, output_dir, output_file):
     """
     Build a matrix of drug alternatives based on ATC codes.
     Each drug is mapped to its alternatives at different ATC levels.
+    Only stores drugs that have at least one alternative.
 
     Args:
         merged_df: Merged dataframe with drug and ATC information
@@ -117,7 +125,7 @@ def build_drug_alternatives_matrix(merged_df, output_dir, output_file):
         f"📊 Filtered from {initial_count} to {len(merged_df)} records with valid ATC codes"
     )
 
-    drug_alternatives_matrix = defaultdict(list)
+    drug_alternatives_matrix = {}  # Changed from defaultdict to regular dict
 
     # for each row in merged_df,
     print("⚙️ Processing ATC alternatives...")
@@ -125,8 +133,10 @@ def build_drug_alternatives_matrix(merged_df, output_dir, output_file):
         codice_aic = row["code"]
         codice_atc = row["codice_atc"].strip()
 
+        alternatives = []  # Collect alternatives for this drug
+
         current_level = codice_atc
-        while len(current_level) > 2:
+        while len(current_level) > 3:
             # Select all alternatives at the current level
             current_level_alternatives = merged_df[
                 merged_df["codice_atc"].str.startswith(current_level)
@@ -134,17 +144,19 @@ def build_drug_alternatives_matrix(merged_df, output_dir, output_file):
             # Get the unique AIC codes for these alternatives
             unique_aic_codes = current_level_alternatives["code"].unique()
 
-            # Add the current AIC code and its alternatives to the matrix if alternative AICs not already present
-            drug_alternatives_matrix[codice_aic].extend(
-                [
-                    aic
-                    for aic in unique_aic_codes
-                    if aic not in drug_alternatives_matrix[codice_aic]
-                ]
-            )
+            # Add alternatives if not already present
+            for aic in unique_aic_codes:
+                if (
+                    aic not in alternatives and aic != codice_aic
+                ):  # Exclude self-reference
+                    alternatives.append(aic)
 
             # Move to the next level by removing the last character
             current_level = current_level[:-1]
+
+        # Only store in matrix if there are actual alternatives
+        if alternatives:
+            drug_alternatives_matrix[codice_aic] = alternatives
 
     # Ensure output directory exists
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -157,6 +169,16 @@ def build_drug_alternatives_matrix(merged_df, output_dir, output_file):
 
     print(f"✅ Drug alternatives matrix saved successfully!")
     print(f"📊 Total drugs with alternatives: {len(drug_alternatives_matrix)}")
+
+    # Calculate total drugs processed vs drugs with alternatives
+    total_drugs_processed = len(merged_df["code"].unique())
+    drugs_with_alternatives = len(drug_alternatives_matrix)
+    drugs_without_alternatives = total_drugs_processed - drugs_with_alternatives
+
+    print(f"📊 Detailed statistics:")
+    print(f"   Total drugs processed: {total_drugs_processed}")
+    print(f"   Drugs with alternatives: {drugs_with_alternatives}")
+    print(f"   Drugs without alternatives: {drugs_without_alternatives}")
 
     return drug_alternatives_matrix
 
