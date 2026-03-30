@@ -27,3 +27,7 @@ The project combines data integration, rule-based checks, and AI-supported compo
 ## Notes
 This repository represents a prototype developed in a collaborative setting.  
 Some components are simplified and certain data sources are not included.
+
+## Demo
+
+[![Demo Video](https://drive.google.com/file/d/1qes1lLyN4Wi8rpypZ3ZUSGIahIkdmhm9/view?usp=sharing)](https://drive.google.com/file/d/1qes1lLyN4Wi8rpypZ3ZUSGIahIkdmhm9/view?usp=sharing)
